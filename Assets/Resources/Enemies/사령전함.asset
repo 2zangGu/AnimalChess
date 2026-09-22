@@ -1,0 +1,27 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 38eddd1ed759dcd48bb70526cc32f447, type: 3}
+  m_Name: "\uC0AC\uB839\uC804\uD568"
+  m_EditorClassIdentifier: Assembly-CSharp::AnimalChess.Data.EnemyUnitData
+  displayName: "\uC0AC\uB839\uC804\uD568"
+  description: "20\uB77C\uC6B4\uB4DC \uBCF4\uC2A4. \uB2E4\uC218\uC758 \uD3EC\uD0D1\uC744 \uC7A5\uCC29\uD55C \uCD08\uB300\uD615 \uC9C0\uD718 \uC804\uD568."
+  icon: {fileID: 21300000, guid: fd26f350eff20a44f9685461f6f07772, type: 3}
+  modelPrefab: {fileID: 0}
+  tier: 3
+  minRound: 20
+  maxRound: 20
+  baseStats:
+    hp: 650
+    attackPower: 55
+    defense: 22
+    attackSpeed: 0.5
+    attackRange: 6

@@ -1,11 +1,12 @@
 using AnimalChess.Data;
+using AnimalChess.Board;
 
 namespace AnimalChess.Game
 {
     /// <summary>
     /// 플레이어가 실제로 보유한 유닛 한 마리(런타임 상태).
     /// AnimalData는 "이런 동물이 있다"는 데이터일 뿐이고, 이 클래스는
-    /// 상점에서 산 그 동물 개체 하나를 가리킨다 (벤치 칸에 저장됨).
+    /// 상점에서 산 그 동물 개체 하나를 가리킨다 (벤치 칸 또는 보드 칸에 저장됨).
     ///
     /// 전투에서 죽으면 isAlive = false로 표시되고, 다음 라운드 준비 시간에
     /// PlayerRoster.ProcessDeaths()가 이걸 보고 강등(3성→2성→1성)시키거나
@@ -15,6 +16,14 @@ namespace AnimalChess.Game
     {
         public AnimalData currentData;
         public bool isAlive = true;
+
+        /// <summary>
+        /// 이 유닛이 보드 위에 배치돼 있으면 그 타일의 좌표, 벤치에만 있으면 null.
+        /// PlayerRoster의 드래그 배치 API(TryPlaceOnBoard/TryMoveOnBoard/TryReturnToBench)가 관리한다.
+        /// </summary>
+        public HexCoord? boardCoord;
+
+        public bool IsOnBoard => boardCoord.HasValue;
 
         public UnitInstance(AnimalData data)
         {

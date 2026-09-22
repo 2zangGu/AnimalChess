@@ -8631,7 +8631,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::AnimalChess.Game.PlayerEconomy
   startingLevel: 1
   xpToNextLevel: 02000000060000000a000000140000002400000038000000500000005400000064000000i
-  startingGold: 50
+  startingGold: 10
   goldPerRound: 5
   goldPerSurvivingUnit: 1
 --- !u!4 &1783325109

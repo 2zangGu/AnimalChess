@@ -22,6 +22,17 @@ namespace AnimalChess.Board
 
         private HexTile _currentHover;
 
+        /// <summary>
+        /// 지금 마우스 호버로 강조돼 있는 타일이 있으면 강조를 끄고 상태를 비운다.
+        /// 유닛 드래그 중에는 UnitDragController가 직접 타일 강조를 담당하므로, 드래그를 시작할 때
+        /// 이 컨트롤러를 비활성화(enabled = false)하기 전에 호출해서 남아있던 호버 강조를 정리한다.
+        /// </summary>
+        public void ClearHover()
+        {
+            if (_currentHover != null) _currentHover.SetHover(false);
+            _currentHover = null;
+        }
+
         private void Update()
         {
             Camera cam = raycastCamera != null ? raycastCamera : Camera.main;

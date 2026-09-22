@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using UnityEngine;
+using AnimalChess.Game;
 
 namespace AnimalChess.Board
 {
@@ -27,6 +28,16 @@ namespace AnimalChess.Board
         [Tooltip("타일 사이 시각적 여백 비율 (0~0.3 권장)")]
         [Range(0f, 0.3f)] public float tileGap = 0.05f;
 
+        [Header("유닛 아이콘 크기")]
+        [Tooltip("보드 위에 놓인 동물(내) 유닛 아이콘의 크기 배율.\n" +
+                 "1.0 = 타일 한 칸의 가로 폭과 거의 비슷한 크기. 더 크게/작게 보이길 원하면 " +
+                 "이 값만 조절하면 된다(BoardUnitView가 이 값을 그대로 참조한다).")]
+        [Range(0.3f, 2f)] public float unitIconScale = 1f;
+
+        [Tooltip("보드 위에 놓인 적 유닛 아이콘의 크기 배율. 동물 유닛(unitIconScale)과 별도로 조절할 수 있다.\n" +
+                 "1.0 = 타일 한 칸의 가로 폭과 거의 비슷한 크기(EnemyUnitView가 이 값을 그대로 참조한다).")]
+        [Range(0.3f, 2f)] public float enemyIconScale = 1f;
+
         [Header("보드 전체 위치")]
         [Tooltip("타일들만 한 번에 옮기는 오프셋.\n" +
                  "GroundBase(배경 바닥)는 물론이고 BoardCenter(카메라가 항상 따라가는 타겟)도 " +
@@ -47,6 +58,8 @@ namespace AnimalChess.Board
             Instance = this;
             BuildBoard();
             EnsureHoverController();
+            EnsureUnitDragSystem();
+            EnsureEnemyVisualsSystem();
         }
 
         /// <summary>
@@ -142,6 +155,35 @@ namespace AnimalChess.Board
             if (GetComponent<HexTileHoverController>() == null)
             {
                 gameObject.AddComponent<HexTileHoverController>();
+            }
+        }
+
+        /// <summary>
+        /// 롤토체스처럼 벤치와 보드 사이에서 유닛을 드래그로 옮길 수 있게 해주는 시스템들
+        /// (보드 위 유닛 비주얼 동기화 + 드래그 입력 처리)을 자동으로 붙여준다.
+        /// EnsureHoverController와 마찬가지로 씬에 직접 추가할 필요는 없다.
+        /// </summary>
+        private void EnsureUnitDragSystem()
+        {
+            if (GetComponent<BoardUnitVisualsController>() == null)
+            {
+                gameObject.AddComponent<BoardUnitVisualsController>();
+            }
+            if (GetComponent<UnitDragController>() == null)
+            {
+                gameObject.AddComponent<UnitDragController>();
+            }
+        }
+
+        /// <summary>
+        /// EnemySpawner가 라운드마다 자동 배치하는 적 유닛들을 보드 위에 그려주는 비주얼 컨트롤러를
+        /// 자동으로 붙여준다. EnsureUnitDragSystem과 마찬가지로 씬에 직접 추가할 필요는 없다.
+        /// </summary>
+        private void EnsureEnemyVisualsSystem()
+        {
+            if (GetComponent<EnemyUnitVisualsController>() == null)
+            {
+                gameObject.AddComponent<EnemyUnitVisualsController>();
             }
         }
 

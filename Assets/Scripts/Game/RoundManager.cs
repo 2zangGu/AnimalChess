@@ -7,6 +7,12 @@ namespace AnimalChess.Game
     /// 게임의 라운드 진행 상태를 관리한다. 시간 제한은 없고,
     /// 정해진 마지막 라운드(기본 30)까지 라운드 번호만 올라간다.
     ///
+    /// 라운드마다 "준비 단계"(유닛 배치/상점)가 있고, 이 단계는 prepTimeLimit(기본 30초) 동안
+    /// 계속되다가 시간이 다 되면 자동으로, 또는 플레이어가 배치를 미리 끝내고 Start 버튼을
+    /// 누르면(StartBattlePhase) 그 즉시 끝난다. 라운드 HUD 옆의 Start 버튼이 이걸 호출한다.
+    /// 실제 전투 시뮬레이션은 아직 없어서, 지금은 준비 단계 종료가 "곧 전투 시작"이라는 상태
+    /// 표시(IsPreparing=false)만 담당한다.
+    ///
     /// 한 라운드가 끝나면(EndRound) 항상:
     /// 1) 고정 골드 + 생존 유닛 1마리당 추가 골드를 지급하고 (PlayerEconomy.GrantRoundEndGold)
     /// 2) 전투 중 죽은 것으로 표시된 유닛을 강등/제거한다 (PlayerRoster.ProcessDeaths)
@@ -15,7 +21,7 @@ namespace AnimalChess.Game
     /// - 보스 라운드(bossRounds, 기본 10/20/30)면 남은 목숨과 상관없이 바로 게임 오버
     /// - 그게 아니면 목숨을 1개 깎는다 (PlayerLives.LoseLife) → 목숨이 0이 되면 그때 게임 오버
     ///
-    /// 게임 오버가 아니면 라운드 번호가 하나 올라간다.
+    /// 게임 오버가 아니면 라운드 번호가 하나 올라가고, 새 라운드의 준비 단계가 다시 시작된다.
     ///
     /// 아직 "웨이브를 다 잡으면 이기고, 못 잡으면 진다" 같은 실제 전투 로직은 없어서,
     /// 그 시스템이 생기면 결과에 따라 EndRound(true)/EndRound(false)를 거기서 호출해주면 된다.
@@ -38,6 +44,11 @@ namespace AnimalChess.Game
         [Tooltip("이 라운드에서 지면 남은 목숨과 상관없이 바로 게임 오버가 된다.")]
         public int[] bossRounds = { 10, 20, 30 };
 
+        [Header("준비 시간")]
+        [Tooltip("한 라운드마다 유닛을 배치할 수 있는 준비 시간(초). 이 시간이 다 되거나 " +
+                 "Start 버튼을 누르면(StartBattlePhase) 준비 단계가 끝난다.")]
+        public float prepTimeLimit = 30f;
+
         [Header("테스트용 (임시)")]
         [Tooltip("웨이브 클리어 판정 로직이 아직 없어서, 테스트로 '승리'를 시뮬레이션할 수 있게 " +
                  "N 키에 임시로 연결해둔 것. 실제 웨이브 시스템이 생기면 꺼도 된다.")]
@@ -51,6 +62,12 @@ namespace AnimalChess.Game
         public bool enableDebugKillKey = true;
 
         public int CurrentRound { get; private set; }
+
+        /// <summary>지금 준비 단계(배치/상점) 중인지. false면 전투 단계.</summary>
+        public bool IsPreparing { get; private set; } = true;
+
+        /// <summary>준비 단계에서 남은 시간(초). 준비 단계가 아니면 0.</summary>
+        public float PrepTimeRemaining { get; private set; }
 
         public bool IsLastRound => CurrentRound >= maxRound;
 
@@ -70,14 +87,26 @@ namespace AnimalChess.Game
         {
             Instance = this;
             CurrentRound = Mathf.Clamp(startingRound, 1, Mathf.Max(1, maxRound));
+            BeginPreparation();
         }
 
         private void Update()
         {
+            bool isGameOver = PlayerLives.Instance != null && PlayerLives.Instance.IsGameOver;
+
+            if (IsPreparing && !isGameOver)
+            {
+                PrepTimeRemaining -= Time.deltaTime;
+                if (PrepTimeRemaining <= 0f)
+                {
+                    StartBattlePhase();
+                }
+            }
+
             if (Keyboard.current == null) return;
 
             // 이미 게임 오버 상태면 테스트 키 입력을 더 받지 않는다.
-            if (PlayerLives.Instance != null && PlayerLives.Instance.IsGameOver) return;
+            if (isGameOver) return;
 
             if (enableDebugAdvanceKey && Keyboard.current.nKey.wasPressedThisFrame)
             {
@@ -93,6 +122,27 @@ namespace AnimalChess.Game
             {
                 PlayerRoster.Instance?.DebugKillRandomUnit();
             }
+        }
+
+        /// <summary>
+        /// 새 라운드의 준비 단계(배치/상점)를 시작한다. 남은 시간을 prepTimeLimit로 초기화한다.
+        /// </summary>
+        private void BeginPreparation()
+        {
+            IsPreparing = true;
+            PrepTimeRemaining = prepTimeLimit;
+        }
+
+        /// <summary>
+        /// 준비 단계를 끝내고 전투 단계로 넘어간다. 준비 시간이 다 됐을 때 자동으로 호출되거나,
+        /// 라운드 HUD 옆의 Start 버튼을 눌러서(미리 배치를 끝냈을 때) 수동으로 호출할 수 있다.
+        /// 이미 준비 단계가 아니면(이미 시작됐으면) 아무 일도 하지 않는다.
+        /// </summary>
+        public void StartBattlePhase()
+        {
+            if (!IsPreparing) return;
+            IsPreparing = false;
+            PrepTimeRemaining = 0f;
         }
 
         /// <summary>
@@ -125,6 +175,7 @@ namespace AnimalChess.Game
             }
 
             SetRound(CurrentRound + 1);
+            BeginPreparation();
         }
 
         public void SetRound(int round)

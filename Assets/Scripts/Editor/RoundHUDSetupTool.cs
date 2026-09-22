@@ -22,6 +22,9 @@ namespace AnimalChess.EditorTools
         private const string PanelTexturePath = "Assets/Textures/UI/RoundHUDPanel.png";
         private const int MaxRound = 30;
         private const float PanelHeight = 60f;
+        private const float DefaultPrepTimeLimit = 30f;
+        private const float StartButtonWidth = 110f;
+        private const float StartButtonGap = 12f;
 
         [MenuItem("Tools/AnimalChess/라운드 HUD 만들기")]
         public static void SetupRoundHUD()
@@ -30,6 +33,8 @@ namespace AnimalChess.EditorTools
             bool eventSystemCreated = EnsureEventSystem();
             bool managerCreated = EnsureRoundManager(out GameObject managerGO);
             bool hudCreated = EnsureRoundHUDPanel(canvas, out GameObject hudGO, out bool barRemoved);
+            var hud = hudGO.GetComponent<RoundHUD>();
+            bool startButtonCreated = EnsureStartButton(hudGO, hud, out GameObject startButtonGO);
 
             string msg = "라운드 HUD를 씬에 준비했습니다.\n\n";
             msg += canvasCreated
@@ -39,18 +44,23 @@ namespace AnimalChess.EditorTools
                 ? "- EventSystem(새 Input System용)을 새로 만들었습니다.\n"
                 : "- 기존 EventSystem을 그대로 사용합니다.\n";
             msg += managerCreated
-                ? $"- 'RoundManager' 오브젝트를 새로 만들었습니다 (마지막 라운드 {MaxRound}, 시간 제한 없음).\n"
+                ? $"- 'RoundManager' 오브젝트를 새로 만들었습니다 (마지막 라운드 {MaxRound}, 준비 시간 {DefaultPrepTimeLimit}초).\n"
                 : "- 기존 'RoundManager'를 그대로 사용합니다.\n";
             msg += hudCreated
-                ? "- 화면 상단에 라운드 표시 UI를 새로 만들었습니다 (텍스트만, 진행도 바 없음).\n"
+                ? "- 화면 상단에 라운드 표시 UI를 새로 만들었습니다 (라운드 번호 + 준비 시간 카운트다운).\n"
                 : "- 기존 라운드 HUD를 그대로 사용합니다.\n";
             if (barRemoved)
             {
                 msg += "- 예전에 만들어졌던 진행도 바를 제거했습니다. 이제 텍스트만 남습니다.\n";
             }
-            msg += "\n웨이브를 다 잡았을 때 다음 라운드로 넘기는 실제 게임 로직은 아직 없어서, " +
-                   "테스트로 Play 중에 N 키를 누르면 라운드가 하나씩 올라갑니다. " +
-                   "실제 웨이브 클리어 로직이 생기면 그 코드에서 RoundManager.Instance.AdvanceRound()를 호출해주면 됩니다.";
+            msg += startButtonCreated
+                ? "- 라운드 HUD 바로 옆에 'Start' 버튼을 새로 만들었습니다. 준비 시간이 남아있어도 배치를 " +
+                  "미리 끝냈으면 이 버튼을 눌러 바로 전투 단계로 넘어갈 수 있습니다.\n"
+                : "- 기존 'Start' 버튼을 그대로 사용합니다.\n";
+            msg += "\n라운드마다 준비 시간(기본 30초)이 다 되거나 Start 버튼을 누르면 전투 단계로 넘어갑니다 " +
+                   "(RoundManager.Instance.IsPreparing이 false가 됨). 아직 실제 전투 시뮬레이션은 없어서, " +
+                   "테스트로 Play 중에 N 키를 누르면 그 라운드를 이긴 것으로 처리하고 다음 라운드로 넘어갑니다 " +
+                   "(다음 라운드의 준비 시간이 자동으로 다시 시작됩니다).";
 
             EditorUtility.DisplayDialog("AnimalChess", msg, "확인");
 
@@ -123,6 +133,7 @@ namespace AnimalChess.EditorTools
             Undo.RegisterCreatedObjectUndo(managerGO, "Create RoundManager");
             var manager = Undo.AddComponent<RoundManager>(managerGO);
             manager.maxRound = MaxRound;
+            manager.prepTimeLimit = DefaultPrepTimeLimit;
             MarkDirty(managerGO);
             return true;
         }
@@ -213,6 +224,72 @@ namespace AnimalChess.EditorTools
             }
 
             MarkDirty(hud.gameObject);
+            return true;
+        }
+
+        /// <summary>
+        /// 라운드 HUD 패널 바로 오른쪽에 'Start' 버튼을 만든다. 준비 시간이 남아있어도 배치를
+        /// 미리 끝냈으면 눌러서 바로 전투 단계로 넘어갈 수 있다(RoundHUD.OnClickStart -> RoundManager.StartBattlePhase).
+        /// 이미 있으면 새로 만들지 않고 hud.startButton 참조만 다시 연결한다(재실행 안전).
+        /// </summary>
+        private static bool EnsureStartButton(GameObject hudGO, RoundHUD hud, out GameObject buttonGO)
+        {
+            var canvasTransform = hudGO.transform.parent;
+            var existing = canvasTransform != null ? canvasTransform.Find("RoundStartButton") : null;
+            if (existing != null)
+            {
+                buttonGO = existing.gameObject;
+                var existingButton = buttonGO.GetComponent<Button>();
+                if (existingButton != null && hud != null) hud.startButton = existingButton;
+                return false;
+            }
+
+            var sprite = LoadOrCreatePanelSprite();
+            var font = GetDefaultFont();
+            var hudRect = hudGO.GetComponent<RectTransform>();
+
+            buttonGO = new GameObject("RoundStartButton", typeof(RectTransform));
+            Undo.RegisterCreatedObjectUndo(buttonGO, "Create Round Start Button");
+            buttonGO.transform.SetParent(canvasTransform, false);
+
+            var rect = buttonGO.GetComponent<RectTransform>();
+            rect.anchorMin = hudRect.anchorMin;
+            rect.anchorMax = hudRect.anchorMax;
+            rect.pivot = hudRect.pivot;
+            float offsetX = hudRect.sizeDelta.x * 0.5f + StartButtonGap + StartButtonWidth * 0.5f;
+            rect.anchoredPosition = hudRect.anchoredPosition + new Vector2(offsetX, 0f);
+            rect.sizeDelta = new Vector2(StartButtonWidth, hudRect.sizeDelta.y);
+
+            var image = buttonGO.AddComponent<Image>();
+            image.sprite = sprite;
+            image.type = Image.Type.Sliced;
+            image.color = new Color(0.25f, 0.75f, 0.35f, 0.95f);
+
+            var button = buttonGO.AddComponent<Button>();
+            button.targetGraphic = image;
+
+            var labelGO = new GameObject("Label", typeof(RectTransform));
+            labelGO.transform.SetParent(buttonGO.transform, false);
+            var labelRect = labelGO.GetComponent<RectTransform>();
+            labelRect.anchorMin = Vector2.zero;
+            labelRect.anchorMax = Vector2.one;
+            labelRect.offsetMin = Vector2.zero;
+            labelRect.offsetMax = Vector2.zero;
+            var label = labelGO.AddComponent<Text>();
+            label.font = font;
+            label.fontSize = 22;
+            label.fontStyle = FontStyle.Bold;
+            label.alignment = TextAnchor.MiddleCenter;
+            label.color = Color.white;
+            label.text = "Start";
+
+            if (hud != null)
+            {
+                button.onClick.AddListener(hud.OnClickStart);
+                hud.startButton = button;
+            }
+
+            MarkDirty(buttonGO);
             return true;
         }
 
