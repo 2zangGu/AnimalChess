@@ -23,20 +23,58 @@ namespace AnimalChess.Board
         public int enemyRows = 4;
 
         [Header("타일 비주얼")]
-        public float hexSize = 1f;
+        public float hexSize = 1.4f;
         [Tooltip("타일 사이 시각적 여백 비율 (0~0.3 권장)")]
         [Range(0f, 0.3f)] public float tileGap = 0.05f;
+
+        [Header("보드 전체 위치")]
+        [Tooltip("타일들만 한 번에 옮기는 오프셋.\n" +
+                 "GroundBase(배경 바닥)는 물론이고 BoardCenter(카메라가 항상 따라가는 타겟)도 " +
+                 "이 값의 영향을 받지 않는다. 그래야 카메라가 같이 따라 움직이며 상쇄해버리지 않고, " +
+                 "화면 안에서 타일이 실제로 움직이는 게 보인다.")]
+        public Vector3 boardOffset = new Vector3(0f, 0f, 4.49f);
 
         /// <summary>보드 중앙(플레이어 존/적 존 경계) 근처의 참조점. 카메라 타겟으로 사용.</summary>
         public Transform BoardCenter { get; private set; }
 
         private readonly Dictionary<HexCoord, HexTile> _tiles = new Dictionary<HexCoord, HexTile>();
+        private readonly Dictionary<HexCoord, Vector3> _tileBasePositions = new Dictionary<HexCoord, Vector3>();
+        private Vector3 _boardCenterBasePosition;
         private Material _tileMaterial;
 
         private void Awake()
         {
             Instance = this;
             BuildBoard();
+            EnsureHoverController();
+        }
+
+        /// <summary>
+        /// Inspector에서 boardOffset(또는 다른 값)을 바꿀 때마다 호출된다.
+        /// Play 모드 중에 값을 바꿔도 이미 생성된 타일 위치가 즉시 반영되도록,
+        /// 저장해둔 "오프셋 적용 전" 기준 위치에 boardOffset을 다시 더해준다.
+        ///
+        /// 주의: BoardCenter는 일부러 여기서 건드리지 않는다. FixedIsoCamera가 매 프레임
+        /// BoardCenter를 따라가며 카메라 위치를 다시 계산하기 때문에, BoardCenter까지 같이
+        /// 옮기면 카메라도 똑같이 따라 움직여서 화면상으로는 타일이 전혀 안 움직이는 것처럼
+        /// 보이는 문제가 있었다(카메라가 상쇄). BoardCenter를 고정해야 타일이 화면 안에서
+        /// 실제로 이동하는 게 보인다.
+        /// </summary>
+        private void OnValidate()
+        {
+            ApplyBoardOffset();
+        }
+
+        private void ApplyBoardOffset()
+        {
+            foreach (var kvp in _tiles)
+            {
+                if (kvp.Value == null) continue;
+                if (_tileBasePositions.TryGetValue(kvp.Key, out var basePos))
+                {
+                    kvp.Value.transform.localPosition = basePos + boardOffset;
+                }
+            }
         }
 
         private void BuildBoard()
@@ -67,7 +105,9 @@ namespace AnimalChess.Board
         {
             var go = new GameObject($"Tile_{coord.q}_{coord.r}");
             go.transform.SetParent(transform, false);
-            go.transform.localPosition = HexMetrics.AxialToWorld(coord, hexSize);
+            Vector3 basePosition = HexMetrics.AxialToWorld(coord, hexSize);
+            _tileBasePositions[coord] = basePosition;
+            go.transform.localPosition = basePosition + boardOffset;
 
             var meshFilter = go.AddComponent<MeshFilter>();
             meshFilter.sharedMesh = mesh;
@@ -76,7 +116,7 @@ namespace AnimalChess.Board
             go.AddComponent<MeshCollider>().sharedMesh = mesh;
 
             var tile = go.AddComponent<HexTile>();
-            tile.Initialize(coord, isPlayerZone);
+            tile.Initialize(coord, isPlayerZone, hexSize * (1f - tileGap));
 
             _tiles[coord] = tile;
         }
@@ -88,9 +128,21 @@ namespace AnimalChess.Board
 
             float centerX = hexSize * Mathf.Sqrt(3f) * (columns - 1) * 0.5f;
             float centerZ = -hexSize * 0.75f; // 프론트라인(플레이어 최전방과 적 최전방 사이) 대략적인 위치
-            centerGO.transform.localPosition = new Vector3(centerX, 0f, centerZ);
+            // BoardCenter는 boardOffset의 영향을 받지 않는다 (카메라 타겟 고정 — 위 ApplyBoardOffset 주석 참고).
+            _boardCenterBasePosition = new Vector3(centerX, 0f, centerZ);
+            centerGO.transform.localPosition = _boardCenterBasePosition;
 
             BoardCenter = centerGO.transform;
+        }
+
+        private void EnsureHoverController()
+        {
+            // 롤토체스 스타일 타일 호버 강조(마우스 오버 시 살짝 투명 + 테두리)를 위해
+            // 마우스 레이캐스트 컨트롤러를 자동으로 붙여준다. 씬에서 직접 추가할 필요 없음.
+            if (GetComponent<HexTileHoverController>() == null)
+            {
+                gameObject.AddComponent<HexTileHoverController>();
+            }
         }
 
         public bool TryGetTile(HexCoord coord, out HexTile tile) => _tiles.TryGetValue(coord, out tile);

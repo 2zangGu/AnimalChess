@@ -1,0 +1,30 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e190b083b6c52a84687a7dcf722876fd, type: 3}
+  m_Name: "\uCF54\uBC1C\uD2B8\uB3C5\uAC1C\uAD6C\uB9AC"
+  m_EditorClassIdentifier: Assembly-CSharp::AnimalChess.Data.AnimalData
+  displayName: "\uCF54\uBC1C\uD2B8\uB3C5\uAC1C\uAD6C\uB9AC"
+  description: "\u2605 HP / \u2605\u2605\u2605\u2605 \uACF5\uACA9 / \u2605 \uBC29\uC5B4 / \u2605\u2605\u2605\u2605 \uACF5\uC18D / \uC0AC\uAC70\uB9AC 1\n\uC791\uC9C0\uB9CC \uCE58\uBA85\uC801\uC778 \uB3C5\uB51C\uB7EC"
+  icon: {fileID: 21300000, guid: 569fd27247ef32a44b85c424606a0671, type: 3}
+  modelPrefab: {fileID: 0}
+  species: 4
+  habitat: 0
+  cost: 5
+  starLevel: 2
+  previousEvolution: {fileID: 11400000, guid: 3d4859a7941ef5247b0749264c08be94, type: 2}
+  nextEvolution: {fileID: 11400000, guid: ff26f3ecc132bad42b2351968d324814, type: 2}
+  baseStats:
+    hp: 8
+    attackPower: 16
+    defense: 2
+    attackSpeed: 1.2
+    attackRange: 1

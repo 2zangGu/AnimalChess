@@ -17,16 +17,10 @@ MonoBehaviour:
   groundColor: {r: 0.4, g: 0.4, b: 0.4, a: 1}
   fogColor: {r: 0.6, g: 0.62, b: 0.65, a: 1}
   ambientColor: {r: 0.45, g: 0.45, b: 0.45, a: 1}
-  propVariants:
-  - shape: 2
-    primaryColor: {r: 0.5, g: 0.5, b: 0.5, a: 1}
-    secondaryColor: {r: 0.35, g: 0.35, b: 0.35, a: 1}
-    count: 5
-    minScale: 0.6
-    maxScale: 1.1
-  - shape: 3
-    primaryColor: {r: 0.45, g: 0.45, b: 0.45, a: 1}
-    secondaryColor: {r: 0.3, g: 0.3, b: 0.3, a: 1}
-    count: 2
-    minScale: 0.8
-    maxScale: 1.1
+  propVariants: []
+  groundTexture: {fileID: 2800000, guid: 28dc90e7aaba4e5aa321b22ceed86bf1, type: 3}
+  overrideGroundTransform: 1
+  groundPositionOverride: {x: 5.34, y: -0.05, z: -0.75}
+  groundWidthOverride: 128
+  groundDepthOverride: 168.4
+  groundRotationOverride: {x: 90.2, y: 0, z: 0}

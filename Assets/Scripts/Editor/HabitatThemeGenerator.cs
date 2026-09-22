@@ -18,11 +18,14 @@ namespace AnimalChess.EditorTools
     public static class HabitatThemeGenerator
     {
         private const string OutputFolder = "Assets/Data/HabitatThemes";
+        private const string DesertGroundTexturePath = "Assets/Textures/DesertGround.png";
 
         [MenuItem("Tools/AnimalChess/Create Default Habitat Themes")]
         public static void CreateDefaultThemes()
         {
             EnsureFolder(OutputFolder);
+
+            Texture2D desertGroundTex = ConfigureAndLoadTexture(DesertGroundTexturePath);
 
             CreateTheme("Theme_Default", null,
                 sky: new Color(0.55f, 0.6f, 0.65f), ground: new Color(0.4f, 0.4f, 0.4f),
@@ -74,7 +77,8 @@ namespace AnimalChess.EditorTools
                     V(PropShape.Boulder, new Color(0.6f,0.48f,0.3f), new Color(0.5f,0.4f,0.25f), 4, 0.8f, 1.3f),
                     V(PropShape.SandDune, new Color(0.72f,0.58f,0.38f), new Color(0.65f,0.52f,0.32f), 5, 0.8f, 1.6f),
                     V(PropShape.Rock, new Color(0.55f,0.45f,0.3f), new Color(0.45f,0.36f,0.24f), 3, 0.5f, 0.9f),
-                });
+                },
+                groundTexture: desertGroundTex);
 
             CreateTheme("Theme_Grassland", Habitat.Grassland,
                 sky: new Color(0.75f, 0.8f, 0.45f), ground: new Color(0.55f, 0.55f, 0.2f),
@@ -117,7 +121,8 @@ namespace AnimalChess.EditorTools
         private static void CreateTheme(
             string assetName, Habitat? habitat,
             Color sky, Color ground, Color fog, Color ambient,
-            PropVariant[] variants)
+            PropVariant[] variants,
+            Texture2D groundTexture = null)
         {
             string path = $"{OutputFolder}/{assetName}.asset";
             var theme = AssetDatabase.LoadAssetAtPath<HabitatBackgroundTheme>(path);
@@ -133,6 +138,7 @@ namespace AnimalChess.EditorTools
             theme.fogColor = fog;
             theme.ambientColor = ambient;
             theme.propVariants = new List<PropVariant>(variants);
+            theme.groundTexture = groundTexture;
 
             if (isNew)
             {
@@ -142,6 +148,30 @@ namespace AnimalChess.EditorTools
             {
                 EditorUtility.SetDirty(theme);
             }
+        }
+
+        /// <summary>
+        /// 바닥 텍스처로 쓸 이미지를 알파 투명(흰 배경 제거된 PNG) 기준으로 임포트 설정을 맞추고 불러온다.
+        /// 텍스처가 없으면 null을 반환하며, 이 경우 해당 테마는 기본 바닥을 그대로 유지한다.
+        /// </summary>
+        private static Texture2D ConfigureAndLoadTexture(string path)
+        {
+            var importer = AssetImporter.GetAtPath(path) as TextureImporter;
+            if (importer != null)
+            {
+                bool changed = false;
+                if (!importer.alphaIsTransparency) { importer.alphaIsTransparency = true; changed = true; }
+                if (importer.textureType != TextureImporterType.Default) { importer.textureType = TextureImporterType.Default; changed = true; }
+                if (importer.wrapMode != TextureWrapMode.Clamp) { importer.wrapMode = TextureWrapMode.Clamp; changed = true; }
+                if (!importer.mipmapEnabled) { importer.mipmapEnabled = true; changed = true; }
+                if (changed)
+                {
+                    EditorUtility.SetDirty(importer);
+                    importer.SaveAndReimport();
+                }
+            }
+
+            return AssetDatabase.LoadAssetAtPath<Texture2D>(path);
         }
 
         private static void EnsureFolder(string path)

@@ -18,11 +18,11 @@ namespace AnimalChess.Board
             vertices[0] = Vector3.zero;
             uvs[0] = new Vector2(0.5f, 0.5f);
 
+            var corners = GetCorners(radius);
             for (int i = 0; i < 6; i++)
             {
+                vertices[i + 1] = corners[i];
                 float angleRad = Mathf.Deg2Rad * (60f * i + 30f);
-                var corner = new Vector3(radius * Mathf.Cos(angleRad), 0f, radius * Mathf.Sin(angleRad));
-                vertices[i + 1] = corner;
                 uvs[i + 1] = new Vector2(0.5f + 0.5f * Mathf.Cos(angleRad), 0.5f + 0.5f * Mathf.Sin(angleRad));
             }
 
@@ -49,6 +49,21 @@ namespace AnimalChess.Board
             mesh.RecalculateBounds();
 
             return mesh;
+        }
+
+        /// <summary>
+        /// 육각형의 6개 꼭짓점 로컬 좌표(y=0, XZ 평면)를 반환한다.
+        /// 타일 테두리(LineRenderer) 등 메쉬 없이 꼭짓점만 필요한 곳에서 재사용한다.
+        /// </summary>
+        public static Vector3[] GetCorners(float radius)
+        {
+            var corners = new Vector3[6];
+            for (int i = 0; i < 6; i++)
+            {
+                float angleRad = Mathf.Deg2Rad * (60f * i + 30f);
+                corners[i] = new Vector3(radius * Mathf.Cos(angleRad), 0f, radius * Mathf.Sin(angleRad));
+            }
+            return corners;
         }
     }
 }
