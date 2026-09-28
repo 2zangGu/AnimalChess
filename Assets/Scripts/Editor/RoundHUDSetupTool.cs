@@ -67,6 +67,27 @@ namespace AnimalChess.EditorTools
             Selection.activeGameObject = hudGO;
         }
 
+        /// <summary>
+        /// 이미 씬에 있는 RoundHUD에 Start 버튼만 추가한다(다이얼로그 없이).
+        /// 자동화 스크립트에서 메뉴(SetupRoundHUD)를 거치지 않고 바로 호출하기 위한 진입점.
+        /// RoundHUD가 씬에 없으면 아무 것도 하지 않고 false를 반환한다.
+        /// </summary>
+        public static bool EnsureStartButtonForExistingHud(out string message)
+        {
+            var hud = Object.FindFirstObjectByType<RoundHUD>();
+            if (hud == null)
+            {
+                message = "씬에 RoundHUD가 없습니다.";
+                return false;
+            }
+
+            bool created = EnsureStartButton(hud.gameObject, hud, out GameObject buttonGO);
+            message = created
+                ? $"Start 버튼을 새로 만들었습니다 ({buttonGO.name})."
+                : "이미 Start 버튼이 있어서 참조만 다시 연결했습니다.";
+            return true;
+        }
+
         private static Canvas EnsureCanvas(out bool created)
         {
             var existing = Object.FindFirstObjectByType<Canvas>();

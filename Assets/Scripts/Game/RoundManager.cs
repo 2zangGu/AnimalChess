@@ -87,7 +87,20 @@ namespace AnimalChess.Game
         {
             Instance = this;
             CurrentRound = Mathf.Clamp(startingRound, 1, Mathf.Max(1, maxRound));
+            EnsureCombatManager();
             BeginPreparation();
+        }
+
+        /// <summary>
+        /// 준비 단계가 끝나면 자동으로 전투(타겟팅/이동/공격/사망 판정)를 시뮬레이션하는 CombatManager를
+        /// 자동으로 붙여준다. BoardManager의 EnsureXxx 헬퍼들과 같은 자기 자신 프로비저닝 패턴.
+        /// </summary>
+        private void EnsureCombatManager()
+        {
+            if (GetComponent<CombatManager>() == null)
+            {
+                gameObject.AddComponent<CombatManager>();
+            }
         }
 
         private void Update()
@@ -131,6 +144,9 @@ namespace AnimalChess.Game
         {
             IsPreparing = true;
             PrepTimeRemaining = prepTimeLimit;
+
+            // 라운드 번호에 따라 자동으로 레벨을 맞춘다(PlayerEconomy.SetLevelForRound 참고).
+            PlayerEconomy.Instance?.SetLevelForRound(CurrentRound);
         }
 
         /// <summary>
@@ -140,7 +156,17 @@ namespace AnimalChess.Game
         /// </summary>
         public void StartBattlePhase()
         {
-            if (!IsPreparing) return;
+            if (!IsPreparing)
+            {
+                Debug.LogWarning("[RoundManager] StartBattlePhase 호출됨 - 이미 준비 단계가 아니라서 무시합니다.");
+                return;
+            }
+            Debug.LogWarning("[RoundManager] StartBattlePhase 호출됨 - 준비 단계를 종료합니다.");
+
+            // 전투가 시작되기 직전, 지금 배치를 기억해둔다. 전투가 끝나면 이 자리로 되돌아간다
+            // (PlayerRoster.RestorePrepPhasePositions 참고).
+            PlayerRoster.Instance?.SnapshotBoardPositions();
+
             IsPreparing = false;
             PrepTimeRemaining = 0f;
         }
@@ -156,6 +182,10 @@ namespace AnimalChess.Game
             int aliveUnits = PlayerRoster.Instance != null ? PlayerRoster.Instance.CountAliveUnits() : 0;
             PlayerEconomy.Instance?.GrantRoundEndGold(aliveUnits);
             PlayerRoster.Instance?.ProcessDeaths();
+
+            // 전투 중 자동 이동으로 흐트러진 배치를, 이번 전투를 시작하기 직전(그 전 준비 단계 때)
+            // 놓여 있던 자리로 되돌린다.
+            PlayerRoster.Instance?.RestorePrepPhasePositions();
 
             if (!won && PlayerLives.Instance != null)
             {
@@ -176,6 +206,11 @@ namespace AnimalChess.Game
 
             SetRound(CurrentRound + 1);
             BeginPreparation();
+
+            // 새 라운드 준비 단계가 시작될 때마다 상점 5칸을 전부 새로 뽑는다(무료 새로고침).
+            // 골드가 드는 수동 새로고침(ShopManager.TryRefresh)과 달리, 라운드가 넘어갈 때는
+            // 비용 없이 자동으로 갱신된다.
+            ShopManager.Instance?.RollAllSlots();
         }
 
         public void SetRound(int round)

@@ -20,8 +20,8 @@ MonoBehaviour:
   minRound: 1
   maxRound: 5
   baseStats:
-    hp: 30
-    attackPower: 9
-    defense: 3
+    hp: 10
+    attackPower: 4
+    defense: 0
     attackSpeed: 0.8
     attackRange: 1

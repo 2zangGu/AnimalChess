@@ -31,6 +31,14 @@ namespace AnimalChess.Game
                  "이 값을 넘으면 원거리로 보고 뒷줄에 배치한다.")]
         public float meleeRangeThreshold = 1.5f;
 
+        [Header("라운드 진행에 따른 웨이브 규모")]
+        [Tooltip("1라운드 기준 적 웨이브 마릿수. 플레이어가 레벨업을 전혀 안 해도 최소 이만큼은 나온다.")]
+        public int baseWaveSize = 2;
+
+        [Tooltip("이 라운드 수가 지날 때마다 웨이브에 적이 1마리씩 더 늘어난다(레벨을 안 올려도 라운드가 " +
+                 "진행되면 자동으로 늘어남). 예: 2면 3라운드마다 1마리씩 증가. 0이면 라운드에 따른 증가 없음.")]
+        public int roundsPerExtraEnemy = 2;
+
         private readonly Dictionary<HexCoord, EnemyUnitInstance> _boardUnits = new Dictionary<HexCoord, EnemyUnitInstance>();
         private EnemyUnitData[] _allEnemies;
         private int _lastSpawnedRound = -1;
@@ -95,9 +103,16 @@ namespace AnimalChess.Game
                 else ranged.Add(data);
             }
 
-            // 적 웨이브 전체 마리 수는 플레이어가 지금 레벨에서 배치할 수 있는 유닛 수(PlayerRoster.MaxBoardUnits)를
-            // 넘지 않게 잘라낸다. 근접/원거리 비율은 원래 eligible 풀의 비율을 최대한 그대로 유지한다.
-            int capacity = PlayerRoster.Instance != null ? PlayerRoster.Instance.MaxBoardUnits : eligible.Count;
+            // 적 웨이브 전체 마리 수는 두 값 중 더 큰 쪽을 쓴다:
+            // 1) 플레이어가 지금 레벨에서 배치할 수 있는 유닛 수(PlayerRoster.MaxBoardUnits)
+            // 2) 라운드 진행에 따라 자연히 늘어나는 기본 웨이브 크기(baseWaveSize + 라운드 보너스)
+            // 이렇게 하면 플레이어가 레벨업을 안 해도 라운드가 지날수록 적 마릿수가 스스로 늘어나서,
+            // 유닛 개개인의 능력치를 계속 올리지 않고도 난이도가 자연스럽게 올라간다.
+            // 근접/원거리 비율은 원래 eligible 풀의 비율을 최대한 그대로 유지한다.
+            int levelBasedSize = PlayerRoster.Instance != null ? PlayerRoster.Instance.MaxBoardUnits : eligible.Count;
+            int roundBonus = roundsPerExtraEnemy > 0 ? (round - 1) / roundsPerExtraEnemy : 0;
+            int roundBasedSize = baseWaveSize + roundBonus;
+            int capacity = Mathf.Max(levelBasedSize, roundBasedSize);
             TrimToCapacity(melee, ranged, capacity);
 
             var frontToBack = GetEnemyTilesFrontToBack();
@@ -184,6 +199,25 @@ namespace AnimalChess.Game
                 return rowCompare != 0 ? rowCompare : a.transform.position.x.CompareTo(b.transform.position.x);
             });
             return tiles;
+        }
+
+        /// <summary>
+        /// 전투 중(CombatManager) 적 유닛이 자동으로 이동할 때 쓰는 저수준 이동. from에 있던 유닛을
+        /// to로 그대로 옮기기만 한다(전투 로직이 이미 to가 비어 있고 유효한 타일인지 확인했다고 가정한다).
+        /// </summary>
+        public void CombatMoveUnit(HexCoord from, HexCoord to)
+        {
+            if (!_boardUnits.TryGetValue(from, out var unit)) return;
+
+            _boardUnits.Remove(from);
+            _boardUnits[to] = unit;
+            unit.boardCoord = to;
+
+            if (BoardManager.Instance != null)
+            {
+                if (BoardManager.Instance.TryGetTile(from, out HexTile fromTile)) fromTile.IsOccupied = false;
+                if (BoardManager.Instance.TryGetTile(to, out HexTile toTile)) toTile.IsOccupied = true;
+            }
         }
 
         /// <summary>배치돼 있던 적 유닛을 모두 치우고, 그 타일들의 점유 상태도 초기화한다.</summary>

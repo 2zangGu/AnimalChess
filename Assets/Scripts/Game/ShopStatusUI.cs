@@ -24,6 +24,8 @@ namespace AnimalChess.Game
         private int _lastLevel = -1;
         private int _lastXp = -1;
         private int _lastGold = -1;
+        private int _lastBoardCount = -1;
+        private int _lastMaxBoardUnits = -1;
         private bool _refreshLabelSet;
 
         private void Update()
@@ -37,17 +39,25 @@ namespace AnimalChess.Game
             var economy = PlayerEconomy.Instance;
             if (economy == null) return;
 
+            var roster = PlayerRoster.Instance;
+            int boardCount = roster != null ? roster.BoardUnits.Count : 0;
+            int maxBoardUnits = roster != null ? roster.MaxBoardUnits : 0;
+
             bool levelChanged = economy.Level != _lastLevel;
             bool xpChanged = economy.CurrentXP != _lastXp;
             bool goldChanged = economy.Gold != _lastGold;
+            bool boardCountChanged = boardCount != _lastBoardCount || maxBoardUnits != _lastMaxBoardUnits;
 
-            if (!levelChanged && !xpChanged && !goldChanged) return;
+            if (!levelChanged && !xpChanged && !goldChanged && !boardCountChanged) return;
 
             _lastLevel = economy.Level;
             _lastXp = economy.CurrentXP;
             _lastGold = economy.Gold;
+            _lastBoardCount = boardCount;
+            _lastMaxBoardUnits = maxBoardUnits;
 
-            if (levelText != null) levelText.text = $"{economy.Level}레벨";
+            // 레벨 옆에 "지금 몇 마리를 배치했는지 / 이 레벨에서 최대 몇 마리까지 배치할 수 있는지"를 같이 보여준다.
+            if (levelText != null) levelText.text = $"{economy.Level}레벨 ({boardCount}/{maxBoardUnits}마리)";
 
             if (xpText != null)
             {

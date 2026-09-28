@@ -6,13 +6,19 @@ namespace AnimalChess.Board
 {
     /// <summary>
     /// PlayerRoster.BoardUnits(보드 위에 배치된 유닛들)를 매 프레임 확인해서, 새로 배치된 유닛은
-    /// BoardUnitView를 만들어 붙이고, 치워지거나(벤치로 복귀/다른 칸으로 이동) 죽어서 사라진 유닛은
-    /// 비주얼을 없애준다. BoardManager가 Awake 시점에 자동으로 붙여주므로 씬에 직접 추가할 필요는 없다.
+    /// BoardUnitView를 만들어 붙이고, 치워지거나(벤치로 복귀/죽음/진화로 교체됨) 사라진 유닛은
+    /// 비주얼을 없애준다. 이미 있는 유닛이 다른 칸으로만 옮겨진 경우(전투 중 자동 이동, 준비 화면
+    /// 드래그 이동 등)에는 뷰를 파괴/재생성하지 않고 그 자리에서 통통 튀며 이동하는 애니메이션을
+    /// 재생한다(BoardUnitView.MoveTo 참고).
+    ///
+    /// BoardManager가 Awake 시점에 자동으로 붙여주므로 씬에 직접 추가할 필요는 없다.
     /// </summary>
     public class BoardUnitVisualsController : MonoBehaviour
     {
-        private readonly Dictionary<HexCoord, BoardUnitView> _views = new Dictionary<HexCoord, BoardUnitView>();
-        private List<HexCoord> _staleBuffer;
+        // 유닛(참조) 기준으로 뷰를 추적한다. 같은 유닛이 좌표만 바뀌었을 때(이동)와
+        // 유닛 자체가 사라졌을 때(죽음/벤치 복귀/진화로 교체됨)를 구분하기 위함이다.
+        private readonly Dictionary<UnitInstance, BoardUnitView> _views = new Dictionary<UnitInstance, BoardUnitView>();
+        private List<UnitInstance> _staleBuffer;
 
         private void Update()
         {
@@ -21,7 +27,7 @@ namespace AnimalChess.Board
             if (roster == null || board == null) return;
 
             RemoveStaleViews(roster);
-            CreateMissingViews(roster, board);
+            CreateOrMoveViews(roster, board);
             RefreshExistingViews();
         }
 
@@ -30,38 +36,51 @@ namespace AnimalChess.Board
             _staleBuffer?.Clear();
             foreach (var kvp in _views)
             {
-                bool stillValid = roster.BoardUnits.TryGetValue(kvp.Key, out var unit) &&
-                                   kvp.Value != null && unit == kvp.Value.Unit;
+                var unit = kvp.Key;
+                bool stillValid = unit != null && kvp.Value != null && unit.boardCoord.HasValue &&
+                                   roster.BoardUnits.TryGetValue(unit.boardCoord.Value, out var atCoord) && atCoord == unit;
                 if (!stillValid)
                 {
-                    (_staleBuffer ??= new List<HexCoord>()).Add(kvp.Key);
+                    (_staleBuffer ??= new List<UnitInstance>()).Add(unit);
                 }
             }
 
             if (_staleBuffer == null) return;
-            foreach (var coord in _staleBuffer)
+            foreach (var unit in _staleBuffer)
             {
-                if (_views.TryGetValue(coord, out var view) && view != null)
+                if (_views.TryGetValue(unit, out var view) && view != null)
                 {
                     Destroy(view.gameObject);
                 }
-                _views.Remove(coord);
+                _views.Remove(unit);
             }
         }
 
-        private void CreateMissingViews(PlayerRoster roster, BoardManager board)
+        private void CreateOrMoveViews(PlayerRoster roster, BoardManager board)
         {
             foreach (var kvp in roster.BoardUnits)
             {
-                if (_views.ContainsKey(kvp.Key)) continue;
-                if (!board.TryGetTile(kvp.Key, out HexTile tile)) continue;
+                HexCoord coord = kvp.Key;
+                UnitInstance unit = kvp.Value;
+                if (unit == null) continue;
 
-                var viewGO = new GameObject($"Unit_{kvp.Key.q}_{kvp.Key.r}");
+                if (_views.TryGetValue(unit, out var existingView) && existingView != null)
+                {
+                    if (!existingView.Coord.Equals(coord) && board.TryGetTile(coord, out HexTile destTile))
+                    {
+                        existingView.MoveTo(destTile, coord);
+                    }
+                    continue;
+                }
+
+                if (!board.TryGetTile(coord, out HexTile tile)) continue;
+
+                var viewGO = new GameObject($"Unit_{coord.q}_{coord.r}");
                 viewGO.transform.SetParent(tile.transform, false);
 
                 var view = viewGO.AddComponent<BoardUnitView>();
-                view.Initialize(kvp.Value, kvp.Key);
-                _views[kvp.Key] = view;
+                view.Initialize(unit, coord);
+                _views[unit] = view;
             }
         }
 
@@ -71,6 +90,25 @@ namespace AnimalChess.Board
             {
                 if (view != null) view.RefreshVisual();
             }
+        }
+
+        /// <summary>
+        /// 지금 그 좌표에 그려져 있는 BoardUnitView를 찾는다. CombatManager가 공격 이펙트를
+        /// 스폰할 위치를 잡거나, 죽은 유닛의 비주얼을 회색으로 바꿀 때 쓴다.
+        /// 유닛이 이동 애니메이션 도중이라도 Coord는 목적지 좌표로 즉시 갱신되므로 항상 최신 값을 찾는다.
+        /// </summary>
+        public bool TryGetView(HexCoord coord, out BoardUnitView view)
+        {
+            foreach (var v in _views.Values)
+            {
+                if (v != null && v.Coord.Equals(coord))
+                {
+                    view = v;
+                    return true;
+                }
+            }
+            view = null;
+            return false;
         }
     }
 }

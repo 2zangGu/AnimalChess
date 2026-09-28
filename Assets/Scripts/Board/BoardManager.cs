@@ -60,6 +60,7 @@ namespace AnimalChess.Board
             EnsureHoverController();
             EnsureUnitDragSystem();
             EnsureEnemyVisualsSystem();
+            EnsureStatPanelPicking();
         }
 
         /// <summary>
@@ -184,6 +185,19 @@ namespace AnimalChess.Board
             if (GetComponent<EnemyUnitVisualsController>() == null)
             {
                 gameObject.AddComponent<EnemyUnitVisualsController>();
+            }
+        }
+
+        /// <summary>
+        /// 마우스 오른쪽 버튼으로 보드 위 유닛(내 유닛/적 유닛)을 클릭하면 정보창(스탯+이미지)을
+        /// 띄워주는 컨트롤러를 자동으로 붙여준다. EnsureUnitDragSystem과 마찬가지로
+        /// 씬에 직접 추가할 필요는 없다.
+        /// </summary>
+        private void EnsureStatPanelPicking()
+        {
+            if (GetComponent<UnitStatPanelController>() == null)
+            {
+                gameObject.AddComponent<UnitStatPanelController>();
             }
         }
 

@@ -7,14 +7,13 @@ namespace AnimalChess.Game
     /// <summary>
     /// 화면 왼쪽에, 지금 활성화된 서식지 시너지를 보여준다.
     ///
-    /// 벤치에 살아있는 유닛들을 서식지(Habitat)별로 세어서, 2마리 이상 모인 서식지만
+    /// 보드에 "배치된" 유닛들만 서식지(Habitat)별로 세어서, 2마리 이상 모인 서식지만
     /// 줄로 표시한다 (Habitat.cs에 정의된 2/4/6 브레이크포인트를 그대로 따른다):
     /// - 2~3마리: 동색 아이콘, "{마리수}/6"
     /// - 4~5마리: 은색 아이콘, "{마리수}/6"
     /// - 6마리 이상: 금색 아이콘, "{마리수}/6"
     ///
-    /// 아직 보드 배치 시스템이 없어서 PlayerRoster와 마찬가지로 "벤치에 살아있는 유닛 전부"를
-    /// 계산 대상으로 삼는다. 나중에 보드 배치 시스템이 생기면 그 기준으로 좁히면 된다.
+    /// 벤치에 대기 중인 유닛은 실제 전투에 참여하지 않으므로 시너지 계산에 넣지 않는다.
     /// </summary>
     public class TraitPanelUI : MonoBehaviour
     {
@@ -45,10 +44,9 @@ namespace AnimalChess.Game
             if (roster == null) return;
 
             var counts = new int[HabitatOrder.Length];
-            var bench = roster.Bench;
-            for (int i = 0; i < bench.Length; i++)
+            foreach (var kvp in roster.BoardUnits)
             {
-                var unit = bench[i];
+                var unit = kvp.Value;
                 if (unit == null || !unit.isAlive || unit.currentData == null) continue;
 
                 for (int h = 0; h < HabitatOrder.Length; h++)

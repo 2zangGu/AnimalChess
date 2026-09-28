@@ -46,12 +46,81 @@ namespace AnimalChess.Game
             }
         }
 
+        // 전투가 시작되는 순간(그 준비 단계에서 마지막으로 배치돼 있던 상태)의 보드 배치를 기억해둔다.
+        // 전투 중에는 유닛들이 자동으로 이리저리 움직이므로, 전투가 끝나면 이 스냅샷을 기준으로
+        // 다음 준비 단계를 "이번 전투 전에 배치했던 자리"로 되돌려준다.
+        private readonly Dictionary<UnitInstance, HexCoord> _prepPhaseBoardSnapshot = new Dictionary<UnitInstance, HexCoord>();
+
         private void Awake()
         {
             Instance = this;
         }
 
         public bool TryGetUnitAt(HexCoord coord, out UnitInstance unit) => _boardUnits.TryGetValue(coord, out unit);
+
+        /// <summary>
+        /// 지금 보드 위 배치를 기억해둔다. RoundManager가 준비 단계를 끝내고 전투를 시작하는 순간
+        /// (Start 버튼을 누르거나 준비 시간이 다 됐을 때) 호출해서, "이번 전투를 시작하기 직전에
+        /// 플레이어가 배치했던 자리"를 남겨둔다.
+        /// </summary>
+        public void SnapshotBoardPositions()
+        {
+            _prepPhaseBoardSnapshot.Clear();
+            foreach (var kvp in _boardUnits)
+            {
+                _prepPhaseBoardSnapshot[kvp.Value] = kvp.Key;
+            }
+        }
+
+        /// <summary>
+        /// SnapshotBoardPositions()가 기억해둔 자리로, 아직 보드에 살아있는 유닛들을 되돌린다.
+        /// RoundManager.EndRound가 ProcessDeaths() 직후(다음 준비 단계가 시작되기 전)에 호출해서,
+        /// 전투 중 자동 이동으로 흐트러진 배치를 "그 전 준비 단계 때 놓았던 자리"로 복원해준다.
+        ///
+        /// 전투 중 죽어서 완전히 사라졌거나(강등 없이 제거) 진화로 다른 유닛(새 UnitInstance)으로
+        /// 교체된 경우엔 스냅샷에 있던 유닛 참조를 더 이상 찾을 수 없으므로 자연히 건너뛴다.
+        /// 자리가 서로 얽혀 있어도(예: 두 유닛이 전투 중 자리를 바꾼 경우) 안전하게 복원하기 위해,
+        /// 먼저 대상 유닛들을 전부 보드에서 내려(점유 해제) 자리를 비운 다음 원래 자리에 다시 놓는다.
+        /// </summary>
+        public void RestorePrepPhasePositions()
+        {
+            if (_prepPhaseBoardSnapshot.Count == 0) return;
+
+            List<(UnitInstance unit, HexCoord coord)> toRestore = null;
+            foreach (var kvp in _prepPhaseBoardSnapshot)
+            {
+                var unit = kvp.Key;
+                if (unit == null || !unit.isAlive || !unit.boardCoord.HasValue) continue;
+                if (!_boardUnits.TryGetValue(unit.boardCoord.Value, out var atCoord) || atCoord != unit) continue;
+
+                (toRestore ??= new List<(UnitInstance, HexCoord)>()).Add((unit, kvp.Value));
+            }
+
+            _prepPhaseBoardSnapshot.Clear();
+            if (toRestore == null) return;
+
+            // 1단계: 대상 유닛들을 지금 자리에서 전부 내린다(점유 해제).
+            foreach (var (unit, _) in toRestore)
+            {
+                var current = unit.boardCoord.Value;
+                _boardUnits.Remove(current);
+                if (BoardManager.Instance != null && BoardManager.Instance.TryGetTile(current, out HexTile currentTile))
+                {
+                    currentTile.IsOccupied = false;
+                }
+            }
+
+            // 2단계: 원래(전투 시작 직전) 있던 자리에 다시 놓는다.
+            foreach (var (unit, originalCoord) in toRestore)
+            {
+                _boardUnits[originalCoord] = unit;
+                unit.boardCoord = originalCoord;
+                if (BoardManager.Instance != null && BoardManager.Instance.TryGetTile(originalCoord, out HexTile originalTile))
+                {
+                    originalTile.IsOccupied = true;
+                }
+            }
+        }
 
         /// <summary>
         /// 벤치 칸(benchIndex)의 유닛을 보드 위의 내 존 타일(coord)에 배치한다.
@@ -87,6 +156,7 @@ namespace AnimalChess.Game
             _boardUnits[coord] = unit;
             unit.boardCoord = coord;
             tile.IsOccupied = true;
+            TryEvolveAll();
             return true;
         }
 
@@ -118,7 +188,28 @@ namespace AnimalChess.Game
             _boardUnits[to] = unit;
             unit.boardCoord = to;
             toTile.IsOccupied = true;
+            TryEvolveAll();
             return true;
+        }
+
+        /// <summary>
+        /// 전투 중(CombatManager) 유닛이 자동으로 이동할 때 쓰는 저수준 이동. TryMoveOnBoard와 달리
+        /// 자리 맞바꿈이나 "내 존인지" 같은 검사를 하지 않고, from에 있던 유닛을 to로 그대로 옮긴다
+        /// (전투 로직이 이미 to가 비어 있고 유효한 타일인지 확인했다고 가정한다).
+        /// </summary>
+        public void CombatMoveUnit(HexCoord from, HexCoord to)
+        {
+            if (!_boardUnits.TryGetValue(from, out var unit)) return;
+
+            _boardUnits.Remove(from);
+            _boardUnits[to] = unit;
+            unit.boardCoord = to;
+
+            if (BoardManager.Instance != null)
+            {
+                if (BoardManager.Instance.TryGetTile(from, out HexTile fromTile)) fromTile.IsOccupied = false;
+                if (BoardManager.Instance.TryGetTile(to, out HexTile toTile)) toTile.IsOccupied = true;
+            }
         }
 
         /// <summary>보드 위의 유닛(from)을 벤치의 빈 자리로 되돌린다. 벤치가 가득 차 있으면 실패한다.</summary>
@@ -133,6 +224,7 @@ namespace AnimalChess.Game
             {
                 tile.IsOccupied = false;
             }
+            TryEvolveAll();
             return true;
         }
 
@@ -181,6 +273,7 @@ namespace AnimalChess.Game
                 if (Bench[i] == null)
                 {
                     Bench[i] = new UnitInstance(animal);
+                    TryEvolveAll();
                     return true;
                 }
             }
@@ -223,15 +316,140 @@ namespace AnimalChess.Game
                 }
             }
 
-            if (removed == null) return;
-            foreach (var coord in removed)
+            if (removed != null)
             {
-                _boardUnits.Remove(coord);
-                if (BoardManager.Instance != null && BoardManager.Instance.TryGetTile(coord, out HexTile tile))
+                foreach (var coord in removed)
                 {
-                    tile.IsOccupied = false;
+                    _boardUnits.Remove(coord);
+                    if (BoardManager.Instance != null && BoardManager.Instance.TryGetTile(coord, out HexTile tile))
+                    {
+                        tile.IsOccupied = false;
+                    }
                 }
             }
+
+            // 강등으로 인해 더 낮은 성장 단계의 마릿수가 우연히 3마리가 될 수도 있으므로
+            // (예: 2성 2마리가 이미 있는데 3성 하나가 죽어서 2성으로 강등되는 경우) 항상 확인한다.
+            TryEvolveAll();
+        }
+
+        /// <summary>
+        /// 벤치+보드를 합쳐서 봤을 때, 같은 성장 단계(같은 AnimalData 애셋)의 유닛이 3마리 모인
+        /// 조합이 있는 한 계속 반복해서 합성한다(3성까지 연쇄적으로 이어질 수 있음).
+        /// 유닛의 종류(동물 species)는 상관없이 모든 유닛에 동일한 규칙으로 적용된다.
+        /// </summary>
+        private void TryEvolveAll()
+        {
+            while (TryEvolveOnce()) { }
+        }
+
+        private readonly struct MergeSlot
+        {
+            public readonly bool isBoard;
+            public readonly int benchIndex;
+            public readonly HexCoord coord;
+
+            public MergeSlot(int benchIndex)
+            {
+                isBoard = false;
+                this.benchIndex = benchIndex;
+                coord = default;
+            }
+
+            public MergeSlot(HexCoord coord)
+            {
+                isBoard = true;
+                this.coord = coord;
+                benchIndex = -1;
+            }
+        }
+
+        /// <summary>
+        /// 벤치+보드를 한 번 훑어서, 같은 AnimalData(같은 성장 단계) 유닛이 3마리 이상 모인
+        /// 그룹을 찾으면 그중 3마리를 지우고 nextEvolution 데이터의 새 유닛 1마리로 바꾼다.
+        /// 합성된 자리는 3마리 중 보드에 배치돼 있던 자리를 우선으로 남겨서(전투 대형이 흐트러지지
+        /// 않게), 전부 벤치에만 있었으면 벤치 자리를 그대로 쓴다. 한 번에 한 그룹만 처리하고
+        /// true를 반환하므로, 호출하는 쪽(TryEvolveAll)이 반복 호출해서 연쇄 진화(1성 9마리 →
+        /// 2성 3마리 → 3성 1마리 같은 경우)까지 자연스럽게 처리된다.
+        /// </summary>
+        private bool TryEvolveOnce()
+        {
+            var groups = new Dictionary<AnimalData, List<MergeSlot>>();
+
+            for (int i = 0; i < BenchSize; i++)
+            {
+                var unit = Bench[i];
+                if (unit == null || unit.currentData == null || unit.currentData.nextEvolution == null) continue;
+                if (!groups.TryGetValue(unit.currentData, out var list))
+                {
+                    list = new List<MergeSlot>();
+                    groups[unit.currentData] = list;
+                }
+                list.Add(new MergeSlot(i));
+            }
+
+            foreach (var kvp in _boardUnits)
+            {
+                var unit = kvp.Value;
+                if (unit == null || !unit.isAlive || unit.currentData == null || unit.currentData.nextEvolution == null) continue;
+                if (!groups.TryGetValue(unit.currentData, out var list))
+                {
+                    list = new List<MergeSlot>();
+                    groups[unit.currentData] = list;
+                }
+                list.Add(new MergeSlot(kvp.Key));
+            }
+
+            foreach (var kvp in groups)
+            {
+                var slots = kvp.Value;
+                if (slots.Count < 3) continue;
+
+                var evolvedData = kvp.Key.nextEvolution;
+
+                // 보드에 있던 자리가 있으면 그 자리를 남겨서 전투 대형을 유지한다.
+                int keepIndex = slots.FindIndex(s => s.isBoard);
+                if (keepIndex < 0) keepIndex = 0;
+                var keepSlot = slots[keepIndex];
+
+                // keepSlot 말고 나머지에서 2마리만 더 지운다 (keepSlot 자리는 새 유닛으로 교체됨).
+                int extraRemoved = 0;
+                for (int i = 0; i < slots.Count && extraRemoved < 2; i++)
+                {
+                    if (i == keepIndex) continue;
+                    var slot = slots[i];
+                    if (slot.isBoard)
+                    {
+                        _boardUnits.Remove(slot.coord);
+                        if (BoardManager.Instance != null && BoardManager.Instance.TryGetTile(slot.coord, out HexTile tile))
+                        {
+                            tile.IsOccupied = false;
+                        }
+                    }
+                    else
+                    {
+                        Bench[slot.benchIndex] = null;
+                    }
+                    extraRemoved++;
+                }
+
+                var evolvedUnit = new UnitInstance(evolvedData);
+                if (keepSlot.isBoard)
+                {
+                    evolvedUnit.boardCoord = keepSlot.coord;
+                    _boardUnits[keepSlot.coord] = evolvedUnit;
+                }
+                else
+                {
+                    Bench[keepSlot.benchIndex] = evolvedUnit;
+                }
+
+                Debug.LogWarning($"[PlayerRoster] 진화: {kvp.Key.displayName} {kvp.Key.starLevel}성 3마리 -> " +
+                                  $"{evolvedData.displayName} {evolvedData.starLevel}성 1마리");
+                return true;
+            }
+
+            return false;
         }
 
         /// <summary>
