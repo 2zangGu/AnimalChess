@@ -17,11 +17,11 @@ MonoBehaviour:
   icon: {fileID: 21300000, guid: 01406adb43475e144af3480302453e6e, type: 3}
   modelPrefab: {fileID: 0}
   tier: 0
-  minRound: 1
-  maxRound: 5
+  minRound: 2
+  maxRound: 11
   baseStats:
-    hp: 10
-    attackPower: 4
-    defense: 0
+    hp: 128
+    attackPower: 29
+    defense: 7
     attackSpeed: 0.8
     attackRange: 1

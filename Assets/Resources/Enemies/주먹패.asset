@@ -18,10 +18,10 @@ MonoBehaviour:
   modelPrefab: {fileID: 0}
   tier: 0
   minRound: 1
-  maxRound: 5
+  maxRound: 10
   baseStats:
-    hp: 8
-    attackPower: 3
-    defense: 0
+    hp: 80
+    attackPower: 22
+    defense: 5
     attackSpeed: 1.1
     attackRange: 1

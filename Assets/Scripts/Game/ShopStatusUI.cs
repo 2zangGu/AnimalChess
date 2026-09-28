@@ -21,12 +21,28 @@ namespace AnimalChess.Game
         [Tooltip("새로고침 버튼 라벨. ShopManager.RefreshCost 값이 바뀌어도 항상 최신 값으로 표시된다.")]
         public Text refreshCostText;
 
+        [Tooltip("새로고침 버튼. 여기서 직접 onClick을 연결해줘야 한다 - 에디터 스크립트(ShopSetupTool)에서 " +
+                 "AddListener로 붙인 클릭 이벤트는 '영구 저장(persistent)'되지 않는 런타임 전용 리스너라서, " +
+                 "씬을 저장하거나 스크립트가 다시 컴파일되면(도메인 리로드) 사라져버린다. 그래서 눌러도 " +
+                 "반응이 없어 보이는 문제가 있었다. Awake()에서 매번 다시 연결하면 이 문제가 없다.")]
+        public Button refreshButton;
+
         private int _lastLevel = -1;
         private int _lastXp = -1;
         private int _lastGold = -1;
         private int _lastBoardCount = -1;
         private int _lastMaxBoardUnits = -1;
         private bool _refreshLabelSet;
+
+        private void Awake()
+        {
+            if (refreshButton != null) refreshButton.onClick.AddListener(OnRefreshClicked);
+        }
+
+        private void OnRefreshClicked()
+        {
+            ShopManager.Instance?.TryRefresh();
+        }
 
         private void Update()
         {
@@ -56,8 +72,10 @@ namespace AnimalChess.Game
             _lastBoardCount = boardCount;
             _lastMaxBoardUnits = maxBoardUnits;
 
-            // 레벨 옆에 "지금 몇 마리를 배치했는지 / 이 레벨에서 최대 몇 마리까지 배치할 수 있는지"를 같이 보여준다.
-            if (levelText != null) levelText.text = $"{economy.Level}레벨 ({boardCount}/{maxBoardUnits}마리)";
+            // 레벨 옆에 "지금 몇 마리를 배치했는지 / 이 레벨에서 최대 몇 마리까지 배치할 수 있는지"를
+            // "0/2" 형태로 같이 보여준다. (예전엔 "(0/2마리)"였는데, 목숨 하트 자리 때문에 좁아진
+            // 칸 폭 안에서 줄바꿈되면 두 번째 줄이 잘려 안 보이는 문제가 있어서 글자 수를 줄였다.)
+            if (levelText != null) levelText.text = $"{economy.Level}레벨 {boardCount}/{maxBoardUnits}";
 
             if (xpText != null)
             {

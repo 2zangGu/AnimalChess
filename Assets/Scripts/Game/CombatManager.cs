@@ -52,6 +52,9 @@ namespace AnimalChess.Game
             public Habitat? habitat;
             public EnemyTier? tier;
             public int starLevel;
+
+            /// <summary>이 유닛이 받는 피해에 곱해지는 배율(1보다 작으면 피해 감소). 사막 시너지가 아군에게 적용한다.</summary>
+            public float damageTakenMultiplier = 1f;
         }
 
         private readonly List<Combatant> _combatants = new List<Combatant>();
@@ -94,12 +97,34 @@ namespace AnimalChess.Game
         /// <summary>
         /// 지금 보드 위(양쪽 진영)에 있는 살아있는 유닛들을 모아 전투 상태를 새로 만든다.
         /// 어느 한쪽이라도 유닛이 없으면 시뮬레이션 없이 바로 라운드 결과를 처리한다.
+        /// 종족/서식지 시너지도 여기서 한 번만 계산해서(전투 중에는 안 바뀜) 각 유닛 스탯/진영
+        /// 전체 효과에 반영한다.
         /// </summary>
         private void BeginBattle()
         {
             _combatants.Clear();
             _byCoord.Clear();
             _moveTickTimer = 0f;
+
+            // 아군 종족별/서식지별 마릿수를 먼저 세서 시너지 등급을 정한다. 같은 성장 계통(예:
+            // 강아지 1성 + 웰시 코기 2성)은 몇 마리가 있든 하나로만 센다(TraitSynergy.CountXxx 참고).
+            var speciesCounts = PlayerRoster.Instance != null
+                ? TraitSynergy.CountSpecies(PlayerRoster.Instance.BoardUnits.Values)
+                : new Dictionary<Species, int>();
+            var habitatCounts = PlayerRoster.Instance != null
+                ? TraitSynergy.CountHabitats(PlayerRoster.Instance.BoardUnits.Values)
+                : new Dictionary<Habitat, int>();
+
+            int forestTier = TraitSynergy.GetTier(habitatCounts.TryGetValue(Habitat.Forest, out int forestCount) ? forestCount : 0);
+            int seaTier = TraitSynergy.GetTier(habitatCounts.TryGetValue(Habitat.Sea, out int seaCount) ? seaCount : 0);
+            int swampTier = TraitSynergy.GetTier(habitatCounts.TryGetValue(Habitat.Swamp, out int swampCount) ? swampCount : 0);
+            int desertTier = TraitSynergy.GetTier(habitatCounts.TryGetValue(Habitat.Desert, out int desertCount) ? desertCount : 0);
+            int grasslandTier = TraitSynergy.GetTier(habitatCounts.TryGetValue(Habitat.Grassland, out int grasslandCount) ? grasslandCount : 0);
+            int tundraTier = TraitSynergy.GetTier(habitatCounts.TryGetValue(Habitat.Tundra, out int tundraCount) ? tundraCount : 0);
+
+            float playerDamageTakenMultiplier = desertTier > 0 ? 1f - TraitSynergy.DesertDamageReductionPercent[desertTier - 1] : 1f;
+            float enemyAttackSpeedMultiplier = swampTier > 0 ? 1f - TraitSynergy.SwampEnemySlowPercent[swampTier - 1] : 1f;
+            float enemyInitialDelay = tundraTier > 0 ? TraitSynergy.TundraEnemyDelaySeconds[tundraTier - 1] : 0f;
 
             if (PlayerRoster.Instance != null)
             {
@@ -108,16 +133,25 @@ namespace AnimalChess.Game
                     var unit = kvp.Value;
                     if (unit == null || !unit.isAlive || unit.currentData == null) continue;
 
+                    var stats = unit.currentData.baseStats;
+                    speciesCounts.TryGetValue(unit.currentData.species, out int speciesCount);
+                    stats = TraitSynergy.ApplySpeciesBonus(stats, unit.currentData.species, speciesCount);
+
+                    // 서식지 시너지(숲/바다)는 종족과 무관하게 아군 전체에 적용된다.
+                    if (forestTier > 0) stats.hp *= 1f + TraitSynergy.ForestHpPercent[forestTier - 1];
+                    if (seaTier > 0) stats.attackSpeed *= 1f + TraitSynergy.SeaAttackSpeedPercent[seaTier - 1];
+
                     var c = new Combatant
                     {
                         coord = kvp.Key,
-                        stats = unit.currentData.baseStats,
-                        currentHp = unit.currentData.baseStats.hp,
+                        stats = stats,
+                        currentHp = stats.hp,
                         isPlayerSide = true,
                         playerUnit = unit,
                         species = unit.currentData.species,
                         habitat = unit.currentData.habitat,
                         starLevel = unit.StarLevel,
+                        damageTakenMultiplier = playerDamageTakenMultiplier,
                     };
                     _combatants.Add(c);
                     _byCoord[c.coord] = c;
@@ -131,15 +165,19 @@ namespace AnimalChess.Game
                     var unit = kvp.Value;
                     if (unit == null || !unit.isAlive || unit.currentData == null) continue;
 
+                    var stats = unit.currentData.baseStats;
+                    stats.attackSpeed *= enemyAttackSpeedMultiplier;
+
                     var c = new Combatant
                     {
                         coord = kvp.Key,
-                        stats = unit.currentData.baseStats,
-                        currentHp = unit.currentData.baseStats.hp,
+                        stats = stats,
+                        currentHp = stats.hp,
                         isPlayerSide = false,
                         enemyUnit = unit,
                         tier = unit.currentData.tier,
                         starLevel = 1,
+                        attackCooldown = enemyInitialDelay,
                     };
                     _combatants.Add(c);
                     _byCoord[c.coord] = c;
@@ -154,7 +192,8 @@ namespace AnimalChess.Game
             AlivePlayerCount = playerCount;
             AliveEnemyCount = enemyCount;
 
-            Debug.LogWarning($"[CombatManager] 전투 시작: 아군 {playerCount}마리 vs 적 {enemyCount}마리");
+            Debug.LogWarning($"[CombatManager] 전투 시작: 아군 {playerCount}마리 vs 적 {enemyCount}마리 " +
+                      $"(숲{forestTier} 바다{seaTier} 늪{swampTier} 사막{desertTier} 초원{grasslandTier} 극지{tundraTier} 시너지 등급)");
 
             // 한쪽이라도 배치된 유닛이 없으면 굳이 틱을 돌릴 필요 없이 즉시 결과 처리.
             // (예: 보드에 유닛을 하나도 배치하지 않고 Start를 누르면 아군 0마리로 바로 패배 처리된다.)
@@ -167,7 +206,53 @@ namespace AnimalChess.Game
                 return;
             }
 
+            // 초원 시너지: 전투 시작 시 근접 아군 몇 마리를 적진 안쪽(빈 칸)으로 기습 이동시킨다.
+            ApplyGrasslandFlank(grasslandTier);
+
             _battleActive = true;
+        }
+
+        /// <summary>
+        /// 초원 시너지: 등급만큼(1/2/3마리) 사거리가 짧은(근접) 아군부터 골라, 적 진영의 비어 있는
+        /// 칸 중 아무 곳으로나 즉시 재배치한다("적 후방 기습"). 등급이 0이거나 적 진영에 빈 칸이
+        /// 없으면 아무 일도 하지 않는다.
+        /// </summary>
+        private void ApplyGrasslandFlank(int tier)
+        {
+            if (tier <= 0 || BoardManager.Instance == null) return;
+
+            int flankCount = TraitSynergy.GrasslandFlankCount[tier - 1];
+
+            var candidates = new List<Combatant>();
+            foreach (var c in _combatants)
+            {
+                if (c.isPlayerSide && c.isAlive) candidates.Add(c);
+            }
+            candidates.Sort((a, b) => a.stats.attackRange.CompareTo(b.stats.attackRange));
+
+            var emptyEnemyTiles = new List<HexCoord>();
+            foreach (var tile in BoardManager.Instance.AllTiles)
+            {
+                if (tile.IsPlayerZone) continue;
+                if (_byCoord.ContainsKey(tile.Coord)) continue;
+                emptyEnemyTiles.Add(tile.Coord);
+            }
+
+            int moved = 0;
+            for (int i = 0; i < candidates.Count && moved < flankCount && emptyEnemyTiles.Count > 0; i++)
+            {
+                int pickIndex = Random.Range(0, emptyEnemyTiles.Count);
+                var dest = emptyEnemyTiles[pickIndex];
+                emptyEnemyTiles.RemoveAt(pickIndex);
+
+                MoveCombatant(candidates[i], dest);
+                moved++;
+            }
+
+            if (moved > 0)
+            {
+                Debug.LogWarning($"[CombatManager] 초원 시너지: 아군 {moved}마리를 적진 안쪽으로 기습 이동시켰습니다.");
+            }
         }
 
         private void TickBattle(float deltaTime)
@@ -343,8 +428,11 @@ namespace AnimalChess.Game
 
         private void PerformAttack(Combatant attacker, Combatant target)
         {
+            // 최소 데미지 하한도 스탯 x10 스케일에 맞춰 1 -> 10으로 올렸다. 기존 1은 예전 작은
+            // 스탯(HP 8/공격 4/방어 2) 기준이라, 스탯이 커진 지금 그대로 두면 하한이 사실상
+            // 무의미해져서 방어력이 아무리 높아도 최소 데미지 보장이 안 되는 셈이 된다.
             float rawDamage = attacker.stats.attackPower - target.stats.defense;
-            float damage = Mathf.Max(1f, rawDamage);
+            float damage = Mathf.Max(10f, rawDamage) * target.damageTakenMultiplier;
             target.currentHp -= damage;
 
             Debug.LogWarning($"[CombatManager] {(attacker.isPlayerSide ? "아군" : "적")} {attacker.coord} -> " +

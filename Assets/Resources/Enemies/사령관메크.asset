@@ -13,15 +13,15 @@ MonoBehaviour:
   m_Name: "\uC0AC\uB839\uAD00\uBA54\uD06C"
   m_EditorClassIdentifier: Assembly-CSharp::AnimalChess.Data.EnemyUnitData
   displayName: "\uC0AC\uB839\uAD00\uBA54\uD06C"
-  description: "10\uB77C\uC6B4\uB4DC \uBCF4\uC2A4. \uC30D\uAC80\uC744 \uB4E0 \uC778\uAC04\uD615 \uC9C0\uD718 \uBA54\uD06C."
+  description: "\uC30D\uAC80\uC744 \uB4E0 \uC778\uAC04\uD615 \uC804\uD22C \uBA54\uD06C. \uD6C4\uBC18\uBD80 \uCD5C\uC0C1\uC704 \uADFC\uC811 \uBCD1\uAE30."
   icon: {fileID: 21300000, guid: 7cf67799318167143a7f50c2d5588509, type: 3}
   modelPrefab: {fileID: 0}
-  tier: 3
-  minRound: 10
-  maxRound: 10
+  tier: 2
+  minRound: 28
+  maxRound: 30
   baseStats:
-    hp: 450
-    attackPower: 45
-    defense: 18
+    hp: 2924
+    attackPower: 341
+    defense: 108
     attackSpeed: 0.9
     attackRange: 1

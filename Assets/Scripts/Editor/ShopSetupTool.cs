@@ -66,6 +66,12 @@ namespace AnimalChess.EditorTools
             // 시너지 패널은 코스트 동전 스프라이트(CoinIcon.png)를 재사용하므로,
             // 그 스프라이트를 만드는 EnsureShopHUD보다 반드시 뒤에서 호출해야 한다.
             bool traitPanelCreated = TraitPanelSetupTool.EnsureTraitPanel(canvas);
+            // 종족 시너지 패널은 서식지 시너지 패널 바로 아래에 붙으므로, 그 패널이 먼저 만들어진
+            // 뒤에 호출해야 한다.
+            bool speciesTraitPanelCreated = SpeciesTraitPanelSetupTool.EnsureSpeciesTraitPanel(canvas);
+            // 시너지 툴팁도 두 패널이 먼저 만들어진(또는 이미 있는) 뒤에 호출해야
+            // 각 줄의 SynergyRowHover 백필이 제대로 동작한다.
+            bool synergyTooltipCreated = SynergyTooltipSetupTool.EnsureSynergyTooltip(canvas);
 
             string msg = "상점 UI를 씬에 준비했습니다.\n\n";
             msg += economyCreated
@@ -92,18 +98,31 @@ namespace AnimalChess.EditorTools
             msg += traitPanelCreated
                 ? "- 화면 왼쪽에 서식지 시너지 패널(2마리 동/4마리 은/6마리 금)을 새로 만들었습니다.\n"
                 : "- 기존 시너지 패널을 그대로 사용합니다.\n";
+            msg += speciesTraitPanelCreated
+                ? "- 서식지 시너지 패널 바로 아래에 종족 시너지 패널을 새로 만들었습니다.\n"
+                : "- 기존 종족 시너지 패널을 그대로 사용합니다.\n";
+            msg += synergyTooltipCreated
+                ? "- [신규] 시너지 패널 줄에 마우스를 올리면 동/은/금 3단계 효과를 전부 보여주는 " +
+                  "말풍선(툴팁)을 시너지 패널 오른쪽에 새로 만들었습니다.\n"
+                : "- 기존 시너지 툴팁을 그대로 사용합니다(줄에 연결이 빠져 있었다면 이번에 다시 연결했습니다).\n";
             msg += "\n※ 상점/벤치 칸에 동물 아이콘을 표시하도록 칸 배치를 다시 잡았습니다. " +
                    "'Tools > AnimalChess > 동물 아이콘 임포트 및 연결'을 실행해야 실제로 그림이 보입니다.\n" +
                    "※ 경험치 표시는 없앴고, 골드는 상점 오른쪽 끝에 작게 붙는 칸으로 따로 뺐습니다.\n" +
                    "※ 골드 칸엔 '골드' 글자 대신 금색 동전 아이콘이 붙고, 리롤 확률 바로 위엔 1~5코스트를 " +
                    "나타내는 동전 아이콘 5개(코스트별 색상)가 추가됐습니다.\n" +
-                   "※ 화면 왼쪽 시너지 패널은 벤치에 살아있는 유닛을 서식지(숲/바다/늪/사막/초원/극지)별로 세어서, " +
-                   "2마리 이상 모인 서식지만 보여줍니다 (2~3마리 동색, 4~5마리 은색, 6마리 이상 금색, 항상 '마리수/6' 표시). " +
-                   "서식지 시너지 효과 자체(스탯/디버프 등)는 아직 실제로 적용되지 않고, 패널 표시만 구현했습니다.\n" +
+                   "※ 화면 왼쪽 시너지 패널(위: 서식지, 아래: 종족)은 보드에 배치된 유닛만 세어서, " +
+                   "1마리만 있어도 회색으로 보여주고 2마리 이상부터 동/은/금 순으로 활성화됩니다(2/4/6마리 기준). " +
+                   "이제 서식지·종족 시너지 모두 실제 전투 스탯/효과에 반영됩니다(자세한 수치는 TraitSynergy.cs 참고). " +
+                   "종족: 포유류/양서류 HP↑, 어류/곤충 공속↑, 파충류 방어력↑, 조류 공격력↑ (그 종족 유닛에게만 적용). " +
+                   "서식지: 숲 아군 HP↑, 바다 아군 공속↑, 늪 적 공속↓, 사막 아군 받는 피해↓, 초원 전투 시작 시 " +
+                   "근접 아군 일부를 적진으로 기습 이동, 극지 적의 첫 공격을 지연 (모두 아군/적 전체에 적용).\n" +
                    "※ 라운드가 끝나면 고정 골드 5원 + 살아남은 내 유닛 1마리당 1원이 지급됩니다.\n" +
                    "※ 목숨은 3개로 시작하고, 일반 라운드를 지면 하트가 1개 줄어듭니다.\n" +
                    "※ 10/20/30라운드(보스 라운드)를 지면 남은 목숨과 상관없이 그 자리에서 바로 게임 오버입니다.\n" +
                    "※ 새로고침 비용은 1골드, 레벨별 경험치 곡선은 테스트용 임시 값이라 나중에 얼마든지 조정할 수 있습니다.\n" +
+                   "※ [수정] 새로고침 버튼을 눌러도 반응이 없던 문제를 고쳤습니다 (버튼 클릭 연결 방식이 " +
+                   "씬 저장/재컴파일 후 사라지는 방식이었던 게 원인이었습니다). 레벨 옆 배치 마릿수(0/2 형태) 표시도 " +
+                   "혹시 연결이 끊겨있었다면 이번에 다시 연결되도록 했습니다.\n" +
                    "※ 전투 중 죽은 유닛은 다음 라운드 준비 시간에 3성→2성→1성 순으로 강등되고, 1성이면 완전히 사라집니다.\n" +
                    "※ 유닛 재고(같은 동물을 몇 마리까지 살 수 있는지) 제한은 아직 없습니다.\n" +
                    "※ 연승/연패 보너스 없이 진행하기로 해서, 승/패 연승 아이콘은 넣지 않았습니다.\n" +
@@ -181,6 +200,8 @@ namespace AnimalChess.EditorTools
                 EnsureLivesUI(hudGO, gameOverPanelGO, GetDefaultFont());
                 EnsureGoldPanel(hudGO, GetDefaultFont(), LoadPanelSprite());
                 EnsureRefreshLabelBinding(hudGO);
+                EnsureRefreshButtonBinding(hudGO);
+                EnsureLevelTextBinding(hudGO);
                 EnsureShopSlotIcons(hudGO);
                 return false;
             }
@@ -213,6 +234,11 @@ namespace AnimalChess.EditorTools
                 new Vector2(0f, 0.66f), new Vector2(1f, 1f),
                 new Vector2(4f, 2f), new Vector2(-4f, -2f),
                 font, 22, FontStyle.Bold, TextAnchor.MiddleLeft, Color.white, "1레벨");
+            // 목숨 하트 자리 때문에 이 칸의 anchorMin.x가 나중에(EnsureLivesUI) 오른쪽으로 줄어들어
+            // 폭이 좁아질 수 있는데, 그 상태에서 "1레벨 0/2"처럼 줄바꿈되면 세로로 잘려서 아예 안
+            // 보이는 문제가 있었다. 줄바꿈/세로 잘림 없이 항상 전체가 보이도록 강제한다.
+            levelText.horizontalOverflow = HorizontalWrapMode.Overflow;
+            levelText.verticalOverflow = VerticalWrapMode.Overflow;
 
             // 확률(%) 숫자 5개는 EnsureOddsRow가 만든다 (아래에서 호출). 코스트 아이콘 줄과
             // 정확히 같은 칸 너비/간격을 써야 숫자가 자기 코스트 아이콘 바로 밑에 오기 때문에,
@@ -230,7 +256,10 @@ namespace AnimalChess.EditorTools
             var refreshLabel = CreateText(refreshButtonRect.transform, "Label",
                 Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero,
                 font, 15, FontStyle.Bold, TextAnchor.MiddleCenter, Color.white, $"새로고침 ({ShopManager.RefreshCost})");
-            refreshButton.onClick.AddListener(() => ShopManager.Instance?.TryRefresh());
+            // 주의: 여기서 onClick.AddListener로 직접 붙이지 않는다. 에디터 스크립트에서 붙인 리스너는
+            // '영구 저장(persistent)'되지 않아서 씬 저장/스크립트 재컴파일(도메인 리로드) 후에 사라진다
+            // (그래서 "새로고침 버튼이 안 눌린다" 버그가 있었다). 대신 ShopStatusUI.refreshButton에
+            // 참조만 연결해두면, ShopStatusUI.Awake()가 Play 모드가 시작될 때마다 새로 연결해준다.
 
             // ---- 오른쪽: 구매 가능한 유닛 5칸 (골드 칸 너비만큼 오른쪽에 여백을 둔다) ----
             var slotsRow = CreateRect(hudGO.transform, "SlotsRow",
@@ -251,6 +280,7 @@ namespace AnimalChess.EditorTools
             var statusUI = hudGO.AddComponent<ShopStatusUI>();
             statusUI.levelText = levelText;
             statusUI.refreshCostText = refreshLabel;
+            statusUI.refreshButton = refreshButton;
 
             EnsureCostIconsRow(hudGO);
             statusUI.costOddsTexts = EnsureOddsRow(hudGO, font);
@@ -634,6 +664,56 @@ namespace AnimalChess.EditorTools
             if (labelTransform != null)
             {
                 statusUI.refreshCostText = labelTransform.GetComponent<Text>();
+                MarkDirty(hudGO);
+            }
+        }
+
+        /// <summary>
+        /// 새로고침 버튼을 ShopStatusUI.refreshButton에 연결해서, Play 모드가 시작될 때마다
+        /// ShopStatusUI.Awake()가 onClick 리스너를 다시 붙여주게 한다. (예전에는 이 도구가
+        /// 버튼을 만들 때 직접 onClick.AddListener를 호출했는데, 그 리스너는 영구 저장되지 않아서
+        /// 씬 저장/스크립트 재컴파일 후에는 사라져 "눌러도 반응 없음" 버그가 있었다.) 재실행 안전.
+        /// </summary>
+        private static void EnsureRefreshButtonBinding(GameObject hudGO)
+        {
+            var statusUI = hudGO.GetComponent<ShopStatusUI>();
+            if (statusUI == null || statusUI.refreshButton != null) return;
+
+            var buttonTransform = hudGO.transform.Find("StatusPanel/RefreshButton");
+            if (buttonTransform != null)
+            {
+                statusUI.refreshButton = buttonTransform.GetComponent<Button>();
+                MarkDirty(hudGO);
+            }
+        }
+
+        /// <summary>
+        /// 레벨 텍스트를 ShopStatusUI.levelText에 연결한다. 정상적인 경우 새로 만들 때 이미
+        /// 연결되어 있지만, 혹시라도 연결이 끊긴(레벨/배치 가능 마릿수 표시가 하나도 안 보이는)
+        /// 예전 씬을 다시 여는 경우를 대비한 안전장치다. 재실행 안전.
+        /// </summary>
+        private static void EnsureLevelTextBinding(GameObject hudGO)
+        {
+            var statusUI = hudGO.GetComponent<ShopStatusUI>();
+            if (statusUI == null) return;
+
+            var labelTransform = hudGO.transform.Find("StatusPanel/LevelText");
+            if (labelTransform == null) return;
+
+            if (statusUI.levelText == null)
+            {
+                statusUI.levelText = labelTransform.GetComponent<Text>();
+                MarkDirty(hudGO);
+            }
+
+            // 레벨 옆 "0/2" 배치 마릿수 표시가 목숨 하트 자리 때문에 좁아진 칸 폭 안에서 줄바꿈되면
+            // 두 번째 줄이 칸 높이에 가려 안 보이는 문제가 있었다. 이미 만들어져 있던 예전 씬에도
+            // 적용되도록, 참조가 이미 있어도 오버플로우 설정만은 매번 강제로 다시 맞춘다.
+            var levelTextComponent = labelTransform.GetComponent<Text>();
+            if (levelTextComponent != null)
+            {
+                levelTextComponent.horizontalOverflow = HorizontalWrapMode.Overflow;
+                levelTextComponent.verticalOverflow = VerticalWrapMode.Overflow;
                 MarkDirty(hudGO);
             }
         }

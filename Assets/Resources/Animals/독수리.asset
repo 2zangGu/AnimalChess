@@ -21,10 +21,10 @@ MonoBehaviour:
   cost: 5
   starLevel: 1
   previousEvolution: {fileID: 0}
-  nextEvolution: {fileID: 11400000, guid: 72630eead2d37f14c8dcb4ecb2a84a3d, type: 2}
+  nextEvolution: {fileID: 11400000, guid: 64f7f99608e4b9b46af0460cf2b92094, type: 2}
   baseStats:
-    hp: 16
-    attackPower: 12
-    defense: 2
+    hp: 160
+    attackPower: 120
+    defense: 20
     attackSpeed: 1.2
     attackRange: 3

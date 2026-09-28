@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEngine.InputSystem;
+using AnimalChess.Environment;
 
 namespace AnimalChess.Game
 {
@@ -166,6 +167,14 @@ namespace AnimalChess.Game
             // 전투가 시작되기 직전, 지금 배치를 기억해둔다. 전투가 끝나면 이 자리로 되돌아간다
             // (PlayerRoster.RestorePrepPhasePositions 참고).
             PlayerRoster.Instance?.SnapshotBoardPositions();
+
+            // 전투 라운드로 돌입할 때, 보드에 배치된 유닛들 중 가장 많은 서식지로 배경을 바꾼다
+            // (동점이면 그 중 하나를 무작위로 고른다). 배치된 유닛이 하나도 없으면 기본 배경으로.
+            if (PlayerRoster.Instance != null && BackgroundThemeManager.Instance != null)
+            {
+                var dominantHabitat = TraitSynergy.ComputeDominantHabitat(PlayerRoster.Instance.BoardUnits.Values);
+                BackgroundThemeManager.Instance.SetDominantHabitat(dominantHabitat);
+            }
 
             IsPreparing = false;
             PrepTimeRemaining = 0f;

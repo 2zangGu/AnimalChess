@@ -153,9 +153,18 @@ namespace AnimalChess.EditorTools
         {
             float t = count <= 1 ? 0f : index / (float)(count - 1);
 
-            float hp = Mathf.Lerp(16f, 650f, Mathf.Pow(t, 1.3f));
-            float atk = Mathf.Lerp(6f, 75f, Mathf.Pow(t, 1.2f));
-            float def = Mathf.Lerp(1f, 24f, Mathf.Pow(t, 1.3f));
+            // 동물 쪽(AnimalRosterGenerator)과 같은 이유로 hp/공격력/방어력에 x10 스케일 적용.
+            // 아군만 커지면 전투가 너무 쉬워지므로 적도 같은 비율로 맞춰서 상대적 밸런스를 유지한다.
+            //
+            // 개별 유닛 스탯 전체를 다시 약 절반으로 낮췄다 - 예를 들어 3라운드에 나오는 "검객"이
+            // 체력398/공격79/방어19라서, 그 시점 플레이어 유닛(1~2코스트, 공격 40~80/방어 20~60)
+            // 여러 마리가 붙어도 잡는 데 시간이 너무 오래 걸려서(반격으로 먼저 죽는 경우도 많았음)
+            // 사실상 못 잡는 벽처럼 느껴졌다. 그 대신 EnemySpawner.baseWaveSize/roundsPerExtraEnemy를
+            // 올려서 "적 하나하나는 약하지만 마릿수가 많다"로 총 전투력을 재분배했다 - 이러면
+            // 낱개 유닛은 금방 죽어서 전투가 빨리 정리되고, 물량으로 난이도를 유지할 수 있다.
+            float hp = Mathf.Lerp(80f, 3250f, Mathf.Pow(t, 1.3f));
+            float atk = Mathf.Lerp(22f, 375f, Mathf.Pow(t, 1.2f));
+            float def = Mathf.Lerp(5f, 120f, Mathf.Pow(t, 1.3f));
 
             return new UnitStats
             {

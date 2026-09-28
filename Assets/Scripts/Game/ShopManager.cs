@@ -52,7 +52,17 @@ namespace AnimalChess.Game
         {
             for (int i = 0; i < SlotCount; i++)
             {
-                Slots[i] = RollOne();
+                // 그 칸에 방금 있던 것과 똑같은 유닛이 다시 나오면 "새로고침이 안 된 것처럼" 보일 수
+                // 있으니, 같은 코스트에 다른 후보가 있다면 몇 번 다시 뽑아서 최대한 피한다
+                // (후보가 그 하나뿐이면 어쩔 수 없이 같은 게 다시 나올 수 있다).
+                var previous = Slots[i];
+                AnimalData picked = null;
+                for (int attempt = 0; attempt < 5; attempt++)
+                {
+                    picked = RollOne();
+                    if (picked == null || previous == null || picked != previous) break;
+                }
+                Slots[i] = picked;
             }
         }
 

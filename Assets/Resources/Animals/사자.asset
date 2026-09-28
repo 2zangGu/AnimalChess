@@ -18,13 +18,13 @@ MonoBehaviour:
   modelPrefab: {fileID: 0}
   species: 0
   habitat: 4
-  cost: 5
+  cost: 4
   starLevel: 1
   previousEvolution: {fileID: 0}
   nextEvolution: {fileID: 11400000, guid: 42b7b3d557ca9064ca99949475019eee, type: 2}
   baseStats:
-    hp: 24
-    attackPower: 16
-    defense: 4
+    hp: 240
+    attackPower: 160
+    defense: 40
     attackSpeed: 0.90000004
     attackRange: 1

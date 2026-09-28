@@ -143,11 +143,15 @@ namespace AnimalChess.EditorTools
             sb.Append('\n').Append(line.designIntent);
             animal.description = sb.ToString();
 
+            // hp/공격력/방어력에 x10 스케일을 적용했다 - 데미지 계산이 "공격력-방어력"에 최소
+            // 데미지 하한(CombatManager.ResolveAttack의 Mathf.Max(10f, ...))을 두고 있는데,
+            // 예전처럼 HP 8/공격 4/방어 2 같은 작은 숫자에서는 서식지/종족 %시너지 보너스가
+            // 이 하한선에 묻혀 거의 체감이 안 됐다. 공속/사거리는 배율 문제와 무관해서 그대로 둔다.
             animal.baseStats = new UnitStats
             {
-                hp = row.hpStar * 8f,
-                attackPower = row.atkStar * 4f,
-                defense = row.defStar * 2f,
+                hp = row.hpStar * 80f,
+                attackPower = row.atkStar * 40f,
+                defense = row.defStar * 20f,
                 attackSpeed = row.aspdStar * 0.3f,
                 attackRange = row.range,
             };
@@ -211,15 +215,26 @@ namespace AnimalChess.EditorTools
             {
                 species = Species.Reptile, habitat = Habitat.Desert, cost = 1,
                 designIntent = "히든 강캐 라인",
+                // 원래 공속 별점이 3->2->1로 진화할수록 계속 떨어지는 유일한 라인이었다.
+                // 다른 코스트1 라인들은 진화해도 공속이 그대로거나 오히려 오르는 게 보통이고
+                // (마지막 단계에서만 살짝 떨어지는 라인은 있어도 1->2성부터 떨어지는 건 이 라인뿐),
+                // 그 결과 "3마리 합쳐서 진화시킨" 2성 왕도마뱀이 그냥 공짜로 뽑은 1성 강아지와
+                // 체력/공격력은 같고 공속만 더 느려서(dps가 오히려 더 낮아서) 거의 손해처럼 보였다.
+                // 공속을 1성과 같은 수준(3)으로 유지해서, 진화하면 공격력은 그대로 두고 방어력만
+                // 확실히 더 세지는(2성 기준 방어 20->60) "명확히 이득"인 그림으로 바꿨다.
+                // (3성은 "히든 강캐"답게 마지막에만 완만하게 느려지도록 1->2로 조정.)
                 star1 = new StarRow { name = "도마뱀", hpStar = 1, atkStar = 1, defStar = 2, aspdStar = 3, range = 1.0f },
-                star2 = new StarRow { name = "왕도마뱀", hpStar = 2, atkStar = 2, defStar = 3, aspdStar = 2, range = 1.0f },
-                star3 = new StarRow { name = "코모도왕도마뱀", hpStar = 4, atkStar = 4, defStar = 4, aspdStar = 1, range = 1.0f },
+                star2 = new StarRow { name = "왕도마뱀", hpStar = 2, atkStar = 2, defStar = 3, aspdStar = 3, range = 1.0f },
+                star3 = new StarRow { name = "코모도왕도마뱀", hpStar = 4, atkStar = 4, defStar = 4, aspdStar = 2, range = 1.0f },
             });
             list.Add(new Line
             {
                 species = Species.Reptile, habitat = Habitat.Forest, cost = 1,
                 designIntent = "저비용 밸런스",
-                star1 = new StarRow { name = "카멜레온", hpStar = 1, atkStar = 1, defStar = 1, aspdStar = 2, range = 1.0f },
+                // 예전엔 hpStar=1이라 개구리/빙어와 완전히 같은 "전스탯 최하값" 조합이었는데,
+                // 이러면 1라운드 최약체 적조차 이기기 힘들 만큼 약해서 hpStar만 2로 살짝 올렸다
+                // ("저비용 밸런스" 컨셉에 맞게 생존력만 보강, 공격/방어/성장곡선은 그대로).
+                star1 = new StarRow { name = "카멜레온", hpStar = 2, atkStar = 1, defStar = 1, aspdStar = 2, range = 1.0f },
                 star2 = new StarRow { name = "목도리도마뱀", hpStar = 2, atkStar = 2, defStar = 2, aspdStar = 2, range = 1.0f },
                 star3 = new StarRow { name = "바실리스크도마뱀", hpStar = 3, atkStar = 3, defStar = 2, aspdStar = 3, range = 2.0f },
             });
@@ -235,15 +250,22 @@ namespace AnimalChess.EditorTools
             {
                 species = Species.Fish, habitat = Habitat.Tundra, cost = 1,
                 designIntent = "극지 저비용",
-                star1 = new StarRow { name = "빙어", hpStar = 1, atkStar = 1, defStar = 1, aspdStar = 2, range = 1.0f },
-                star2 = new StarRow { name = "열빙어", hpStar = 2, atkStar = 1, defStar = 1, aspdStar = 3, range = 1.0f },
+                // 카멜레온과 같은 이유로 hpStar만 1->2 (전스탯 최하값 조합 방지, 생존력 보강).
+                star1 = new StarRow { name = "빙어", hpStar = 2, atkStar = 1, defStar = 1, aspdStar = 2, range = 1.0f },
+                // 원래 1성(빙어)과 hp/공격/방어가 완전히 같아서(공속만 +1) 진화해도 사실상
+                // 아무것도 안 세지는 셈이었다. 방어만 1->2로 올려서 최소한의 실질 성장을 줬다.
+                star2 = new StarRow { name = "열빙어", hpStar = 2, atkStar = 1, defStar = 2, aspdStar = 3, range = 1.0f },
                 star3 = new StarRow { name = "은어", hpStar = 2, atkStar = 2, defStar = 2, aspdStar = 3, range = 1.0f },
             });
             list.Add(new Line
             {
                 species = Species.Amphibian, habitat = Habitat.Swamp, cost = 1,
                 designIntent = "성장폭 큰 반전 라인",
-                star1 = new StarRow { name = "개구리", hpStar = 1, atkStar = 1, defStar = 1, aspdStar = 2, range = 1.0f },
+                // 개구리는 "성장폭 큰 반전 라인"(초반 약함 -> 후반 강함)이라 1성이 약한 것 자체는
+                // 의도된 설계지만, 예전 hpStar=1은 카멜레온/빙어와 완전히 같은 "전스탯 최하값"이라
+                // 1라운드 최약체 적한테도 거의 항상 짐. hpStar만 2로 올려서 최소한의 생존력은
+                // 확보하고, 2성/3성의 큰 성장폭(반전 컨셉)은 그대로 유지했다.
+                star1 = new StarRow { name = "개구리", hpStar = 2, atkStar = 1, defStar = 1, aspdStar = 2, range = 1.0f },
                 star2 = new StarRow { name = "황소개구리", hpStar = 3, atkStar = 2, defStar = 2, aspdStar = 2, range = 1.0f },
                 star3 = new StarRow { name = "골리앗개구리", hpStar = 5, atkStar = 3, defStar = 3, aspdStar = 2, range = 1.0f },
             });
@@ -474,7 +496,9 @@ namespace AnimalChess.EditorTools
                 species = Species.Fish, habitat = Habitat.Sea, cost = 4,
                 designIntent = "바다 대형 탱커",
                 star1 = new StarRow { name = "흰동가리", hpStar = 2, atkStar = 1, defStar = 2, aspdStar = 2, range = 1.0f },
-                star2 = new StarRow { name = "쥐가오리", hpStar = 4, atkStar = 2, defStar = 3, aspdStar = 1, range = 1.0f },
+                // 1성(흰동가리)에서 바로 공속이 떨어지던 걸(2->1) 1성과 같게 유지해서, "덩치 커지며
+                // 느려지는" 느낌은 마지막 진화(3성)에서만 나오게 했다(다른 라인들과 같은 패턴).
+                star2 = new StarRow { name = "쥐가오리", hpStar = 4, atkStar = 2, defStar = 3, aspdStar = 2, range = 1.0f },
                 star3 = new StarRow { name = "만타가오리", hpStar = 5, atkStar = 2, defStar = 4, aspdStar = 1, range = 1.0f },
             });
             list.Add(new Line
@@ -508,8 +532,8 @@ namespace AnimalChess.EditorTools
                 species = Species.Bird, habitat = Habitat.Tundra, cost = 5,
                 designIntent = "최고 공속+사거리",
                 star1 = new StarRow { name = "독수리", hpStar = 2, atkStar = 3, defStar = 1, aspdStar = 4, range = 3.0f },
-                star2 = new StarRow { name = "흰머리독수리", hpStar = 2, atkStar = 4, defStar = 1, aspdStar = 5, range = 3.5f },
-                star3 = new StarRow { name = "하르피아", hpStar = 3, atkStar = 5, defStar = 2, aspdStar = 5, range = 4.0f },
+                star2 = new StarRow { name = "검독수리", hpStar = 2, atkStar = 4, defStar = 1, aspdStar = 5, range = 3.5f },
+                star3 = new StarRow { name = "흰머리독수리", hpStar = 3, atkStar = 5, defStar = 2, aspdStar = 5, range = 4.0f },
             });
             list.Add(new Line
             {
@@ -549,13 +573,15 @@ namespace AnimalChess.EditorTools
                 designIntent = "최상위 독딜러",
                 star1 = new StarRow { name = "그린맘바", hpStar = 2, atkStar = 4, defStar = 1, aspdStar = 4, range = 1.0f },
                 star2 = new StarRow { name = "블랙맘바", hpStar = 3, atkStar = 5, defStar = 2, aspdStar = 4, range = 1.0f },
-                star3 = new StarRow { name = "킹코브라", hpStar = 3, atkStar = 5, defStar = 2, aspdStar = 5, range = 2.0f },
+                // 2성(블랙맘바)과 hp/공격/방어가 완전히 같아서(공속+사거리만 늘어남) 방어를
+                // 2->3으로 올려 최상위(5코스트) 마무리 진화다운 실질 성장을 추가했다.
+                star3 = new StarRow { name = "킹코브라", hpStar = 3, atkStar = 5, defStar = 3, aspdStar = 5, range = 2.0f },
             });
             list.Add(new Line
             {
                 species = Species.Fish, habitat = Habitat.Sea, cost = 5,
                 designIntent = "최상위 딜러 상어",
-                star1 = new StarRow { name = "흑기흉상어", hpStar = 3, atkStar = 4, defStar = 2, aspdStar = 3, range = 1.0f },
+                star1 = new StarRow { name = "상어", hpStar = 3, atkStar = 4, defStar = 2, aspdStar = 3, range = 1.0f },
                 star2 = new StarRow { name = "뱀상어", hpStar = 4, atkStar = 5, defStar = 2, aspdStar = 3, range = 1.0f },
                 star3 = new StarRow { name = "백상아리", hpStar = 5, atkStar = 5, defStar = 3, aspdStar = 3, range = 1.0f },
             });

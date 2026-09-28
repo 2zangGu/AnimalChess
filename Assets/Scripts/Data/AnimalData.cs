@@ -39,5 +39,23 @@ namespace AnimalChess.Data
 
         [Header("전투 스탯")]
         public UnitStats baseStats;
+
+        /// <summary>
+        /// 이 동물이 속한 성장 계통의 "뿌리"(1성) AnimalData를 찾는다. 서식지/종족 시너지
+        /// 마릿수를 셀 때 "같은 계열"을 구별하는 기준으로 쓴다 - 예를 들어 강아지(1성)와
+        /// 웰시 코기(2성)는 previousEvolution 체인을 타고 올라가면 같은 뿌리(강아지)가 나오므로
+        /// 같은 계열로 취급해서, 시너지 마릿수는 실제 몇 마리든 상관없이 1로만 센다.
+        /// </summary>
+        public AnimalData GetFamilyRoot()
+        {
+            var current = this;
+            int guard = 0; // previousEvolution이 실수로 순환 참조되는 경우를 대비한 안전장치.
+            while (current.previousEvolution != null && guard < 10)
+            {
+                current = current.previousEvolution;
+                guard++;
+            }
+            return current;
+        }
     }
 }

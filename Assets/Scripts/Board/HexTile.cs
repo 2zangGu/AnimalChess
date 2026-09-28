@@ -17,8 +17,10 @@ namespace AnimalChess.Board
         public bool IsOccupied { get; set; }
 
         [Header("타일 색상 (평소 상태)")]
-        public Color playerZoneColor = new Color(0.55f, 0.75f, 1f);
-        public Color enemyZoneColor = new Color(1f, 0.6f, 0.55f);
+        [Tooltip("이 타일 기본 재질(URP/Lit, 불투명)은 알파를 무시하므로, 옅게 보이려면 RGB 자체를 " +
+                 "흰색에 가깝게 밝고 채도 낮은 색으로 잡아야 한다. 거의 안 보일 만큼 옅은 파스텔톤.")]
+        public Color playerZoneColor = new Color(0.94f, 0.965f, 1f);
+        public Color enemyZoneColor = new Color(1f, 0.955f, 0.945f);
 
         [Header("호버 강조 (마우스 오버 / 유닛 선택 중)")]
         [Tooltip("호버 시 채워지는 반투명 색 (알파를 낮게 잡아서 살짝 비치게)")]

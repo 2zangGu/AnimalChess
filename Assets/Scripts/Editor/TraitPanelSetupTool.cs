@@ -27,7 +27,11 @@ namespace AnimalChess.EditorTools
         public static bool EnsureTraitPanel(Canvas canvas)
         {
             var existing = Object.FindFirstObjectByType<TraitPanelUI>();
-            if (existing != null) return false;
+            if (existing != null)
+            {
+                EnsureRowHoverBackfill(existing);
+                return false;
+            }
 
             var font = GetDefaultFont();
             var panelSprite = AssetDatabase.LoadAssetAtPath<Sprite>(PanelTexturePath);
@@ -58,6 +62,7 @@ namespace AnimalChess.EditorTools
             var rows = new GameObject[habitats.Length];
             var icons = new Image[habitats.Length];
             var labels = new Text[habitats.Length];
+            var hovers = new SynergyRowHover[habitats.Length];
 
             for (int i = 0; i < habitats.Length; i++)
             {
@@ -100,6 +105,10 @@ namespace AnimalChess.EditorTools
                 label.text = $"{HabitatDisplay.GetKoreanName(habitats[i])} 0/6";
                 labels[i] = label;
 
+                // 마우스를 올리면 이 서식지의 동/은/금 3단계 효과를 전부 보여주는 툴팁 트리거.
+                // 배경 Image(bg)가 raycastTarget=true(기본값)라서 이 줄 전체가 마우스 이벤트를 받는다.
+                hovers[i] = rowGO.AddComponent<SynergyRowHover>();
+
                 rowGO.SetActive(false); // 처음엔 다 꺼둔다 (실제로 2마리 이상 모인 시너지만 보이게).
                 rows[i] = rowGO;
             }
@@ -108,6 +117,7 @@ namespace AnimalChess.EditorTools
             panelUI.rows = rows;
             panelUI.rowIcons = icons;
             panelUI.rowLabels = labels;
+            panelUI.rowHovers = hovers;
 
             EditorUtility.SetDirty(panelGO);
             EditorSceneManager.MarkSceneDirty(panelGO.scene);
@@ -119,6 +129,37 @@ namespace AnimalChess.EditorTools
             var font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
             if (font == null) font = Resources.GetBuiltinResource<Font>("Arial.ttf");
             return font;
+        }
+
+        /// <summary>
+        /// 이 도구가 예전에 만들어둔(마우스 오버 툴팁 기능이 생기기 전) 패널이라면, 각 줄에
+        /// SynergyRowHover가 빠져 있을 수 있으니 채워 넣는다. 재실행 안전.
+        /// </summary>
+        private static void EnsureRowHoverBackfill(TraitPanelUI panelUI)
+        {
+            if (panelUI.rows == null) return;
+
+            bool needsBackfill = panelUI.rowHovers == null || panelUI.rowHovers.Length != panelUI.rows.Length;
+            if (!needsBackfill)
+            {
+                foreach (var h in panelUI.rowHovers)
+                {
+                    if (h == null) { needsBackfill = true; break; }
+                }
+            }
+            if (!needsBackfill) return;
+
+            var hovers = new SynergyRowHover[panelUI.rows.Length];
+            for (int i = 0; i < panelUI.rows.Length; i++)
+            {
+                if (panelUI.rows[i] == null) continue;
+                var hover = panelUI.rows[i].GetComponent<SynergyRowHover>();
+                if (hover == null) hover = panelUI.rows[i].AddComponent<SynergyRowHover>();
+                hovers[i] = hover;
+            }
+            panelUI.rowHovers = hovers;
+            EditorUtility.SetDirty(panelUI);
+            EditorSceneManager.MarkSceneDirty(panelUI.gameObject.scene);
         }
     }
 }

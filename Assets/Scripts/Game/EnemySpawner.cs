@@ -36,8 +36,11 @@ namespace AnimalChess.Game
         public int baseWaveSize = 2;
 
         [Tooltip("이 라운드 수가 지날 때마다 웨이브에 적이 1마리씩 더 늘어난다(레벨을 안 올려도 라운드가 " +
-                 "진행되면 자동으로 늘어남). 예: 2면 3라운드마다 1마리씩 증가. 0이면 라운드에 따른 증가 없음.")]
-        public int roundsPerExtraEnemy = 2;
+                 "진행되면 자동으로 늘어남). 예: 2면 3라운드마다 1마리씩 증가. 0이면 라운드에 따른 증가 없음.\n" +
+                 "(개별 유닛 스탯을 절반으로 낮춘 대신(EnemyRosterGenerator 참고) 이 값을 2->1로 줄여서 " +
+                 "마릿수가 라운드마다 더 빨리 늘어나게 했다 - 적 하나하나는 약해졌지만 물량으로 난이도를 " +
+                 "유지하는 방향.)")]
+        public int roundsPerExtraEnemy = 1;
 
         private readonly Dictionary<HexCoord, EnemyUnitInstance> _boardUnits = new Dictionary<HexCoord, EnemyUnitInstance>();
         private EnemyUnitData[] _allEnemies;

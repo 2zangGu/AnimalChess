@@ -23,8 +23,8 @@ MonoBehaviour:
   previousEvolution: {fileID: 11400000, guid: d1b7772351b0a254a9d338c62b097ece, type: 2}
   nextEvolution: {fileID: 11400000, guid: 6c79f979e26e6b34d95ba7405ca53362, type: 2}
   baseStats:
-    hp: 24
-    attackPower: 16
-    defense: 4
+    hp: 240
+    attackPower: 160
+    defense: 40
     attackSpeed: 1.2
     attackRange: 1
