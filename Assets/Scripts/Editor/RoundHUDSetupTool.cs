@@ -22,7 +22,7 @@ namespace AnimalChess.EditorTools
         private const string PanelTexturePath = "Assets/Textures/UI/RoundHUDPanel.png";
         private const int MaxRound = 30;
         private const float PanelHeight = 60f;
-        private const float DefaultPrepTimeLimit = 30f;
+        private const float DefaultPrepTimeLimit = 60f;
         private const float StartButtonWidth = 110f;
         private const float StartButtonGap = 12f;
 
@@ -57,7 +57,7 @@ namespace AnimalChess.EditorTools
                 ? "- 라운드 HUD 바로 옆에 'Start' 버튼을 새로 만들었습니다. 준비 시간이 남아있어도 배치를 " +
                   "미리 끝냈으면 이 버튼을 눌러 바로 전투 단계로 넘어갈 수 있습니다.\n"
                 : "- 기존 'Start' 버튼을 그대로 사용합니다.\n";
-            msg += "\n라운드마다 준비 시간(기본 30초)이 다 되거나 Start 버튼을 누르면 전투 단계로 넘어갑니다 " +
+            msg += $"\n라운드마다 준비 시간(기본 {DefaultPrepTimeLimit}초)이 다 되거나 Start 버튼을 누르면 전투 단계로 넘어갑니다 " +
                    "(RoundManager.Instance.IsPreparing이 false가 됨). 아직 실제 전투 시뮬레이션은 없어서, " +
                    "테스트로 Play 중에 N 키를 누르면 그 라운드를 이긴 것으로 처리하고 다음 라운드로 넘어갑니다 " +
                    "(다음 라운드의 준비 시간이 자동으로 다시 시작됩니다).";
@@ -147,6 +147,7 @@ namespace AnimalChess.EditorTools
             if (existing != null)
             {
                 managerGO = existing.gameObject;
+                EnsurePrepTimeLimitBackfill(existing);
                 return false;
             }
 
@@ -157,6 +158,23 @@ namespace AnimalChess.EditorTools
             manager.prepTimeLimit = DefaultPrepTimeLimit;
             MarkDirty(managerGO);
             return true;
+        }
+
+        /// <summary>
+        /// 이미 씬에 있던 RoundManager는 컴포넌트가 처음 추가된 시점의 prepTimeLimit 값이 씬 YAML에
+        /// 그대로 저장돼 있어서, C# 기본값(DefaultPrepTimeLimit)을 30->60으로 바꿔도 저절로 반영되지
+        /// 않는다(EnemySpawner.roundsPerExtraEnemy 때와 같은 종류의 문제). 예전 기본값(30초)이 그대로
+        /// 남아있는 경우에만 새 기본값으로 덮어써서, 메뉴를 다시 실행하는 것만으로 기존 씬도 갱신되게 한다.
+        /// 사용자가 인스펙터에서 직접 다른 값으로 바꿔둔 경우(30이 아닌 값)는 건드리지 않는다.
+        /// </summary>
+        private static void EnsurePrepTimeLimitBackfill(RoundManager manager)
+        {
+            const float staleDefault = 30f;
+            if (!Mathf.Approximately(manager.prepTimeLimit, staleDefault)) return;
+
+            Undo.RecordObject(manager, "Update RoundManager Prep Time Limit");
+            manager.prepTimeLimit = DefaultPrepTimeLimit;
+            EditorUtility.SetDirty(manager);
         }
 
         private static bool EnsureRoundHUDPanel(Canvas canvas, out GameObject hudGO, out bool barRemoved)

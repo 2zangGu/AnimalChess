@@ -156,7 +156,7 @@ namespace AnimalChess.Game
             _boardUnits[coord] = unit;
             unit.boardCoord = coord;
             tile.IsOccupied = true;
-            TryEvolveAll();
+            TryEvolveAllDuringPrepOnly();
             return true;
         }
 
@@ -188,7 +188,7 @@ namespace AnimalChess.Game
             _boardUnits[to] = unit;
             unit.boardCoord = to;
             toTile.IsOccupied = true;
-            TryEvolveAll();
+            TryEvolveAllDuringPrepOnly();
             return true;
         }
 
@@ -224,7 +224,7 @@ namespace AnimalChess.Game
             {
                 tile.IsOccupied = false;
             }
-            TryEvolveAll();
+            TryEvolveAllDuringPrepOnly();
             return true;
         }
 
@@ -273,7 +273,7 @@ namespace AnimalChess.Game
                 if (Bench[i] == null)
                 {
                     Bench[i] = new UnitInstance(animal);
-                    TryEvolveAll();
+                    TryEvolveAllDuringPrepOnly();
                     return true;
                 }
             }
@@ -341,6 +341,21 @@ namespace AnimalChess.Game
         private void TryEvolveAll()
         {
             while (TryEvolveOnce()) { }
+        }
+
+        /// <summary>
+        /// 상점 구매/드래그처럼 플레이어가 직접 하는 행동 뒤에 붙는 진화 체크. 상점/드래그는 전투가
+        /// 진행되는 동안에도 계속 조작할 수 있어서(RoundManager.IsPreparing과 무관하게 언제든
+        /// 호출될 수 있음), 이 체크를 그냥 TryEvolveAll()로 두면 전투 중에 3마리가 모이는 순간
+        /// 바로 진화해버리는 문제가 있었다. 전투 중에는 합성을 미뤄뒀다가, 그 라운드가 끝나고
+        /// RoundManager.EndRound가 PlayerRoster.ProcessDeaths를 호출하는 시점(그 안에서 다시
+        /// TryEvolveAll()을 무조건 호출한다)에 한꺼번에 처리되게 한다. RoundManager가 아직 없으면
+        /// (예: 테스트 씬) 안전하게 그냥 바로 진화시킨다.
+        /// </summary>
+        private void TryEvolveAllDuringPrepOnly()
+        {
+            if (RoundManager.Instance != null && !RoundManager.Instance.IsPreparing) return;
+            TryEvolveAll();
         }
 
         private readonly struct MergeSlot
@@ -450,6 +465,59 @@ namespace AnimalChess.Game
             }
 
             return false;
+        }
+
+        /// <summary>
+        /// 유닛 한 마리를 팔았을 때 받는 골드를 계산한다.
+        /// - 1성: 그 유닛의 코스트 그대로 (상점에서 살 때 낸 돈만큼 그대로 돌려받음).
+        /// - 2성/3성: 그 별 단계까지 합성하는 데 실제로 들어간 1성 마릿수(3^(별단계-1))만큼의
+        ///   코스트 총합에서 1을 뺀 값. 예: 코스트1 2성은 1성 3마리(3원) 합성해서 만드니 3-1=2원,
+        ///   코스트1 3성은 1성 9마리(9원)가 필요하니 9-1=8원.
+        /// </summary>
+        public static int GetSellPrice(UnitInstance unit)
+        {
+            if (unit == null || unit.currentData == null) return 0;
+
+            int baseCost = unit.currentData.cost;
+            int star = Mathf.Clamp(unit.currentData.starLevel, 1, 3);
+            int investedCost = baseCost * (int)Mathf.Pow(3, star - 1); // 1성=1배, 2성=3배, 3성=9배
+
+            return star <= 1 ? investedCost : investedCost - 1;
+        }
+
+        /// <summary>
+        /// 벤치 칸(benchIndex)의 유닛을 판다: 그 칸에서 완전히 없애고 GetSellPrice만큼 골드를 지급한다.
+        /// </summary>
+        public bool TrySellFromBench(int benchIndex, out int soldPrice)
+        {
+            soldPrice = 0;
+            if (benchIndex < 0 || benchIndex >= BenchSize) return false;
+            var unit = Bench[benchIndex];
+            if (unit == null) return false;
+
+            soldPrice = GetSellPrice(unit);
+            Bench[benchIndex] = null;
+            PlayerEconomy.Instance?.AddGold(soldPrice);
+            return true;
+        }
+
+        /// <summary>
+        /// 보드 위의 유닛(coord)을 판다: 그 자리에서 완전히 없애고(타일도 다시 빈 칸으로)
+        /// GetSellPrice만큼 골드를 지급한다.
+        /// </summary>
+        public bool TrySellFromBoard(HexCoord coord, out int soldPrice)
+        {
+            soldPrice = 0;
+            if (!_boardUnits.TryGetValue(coord, out var unit)) return false;
+
+            soldPrice = GetSellPrice(unit);
+            _boardUnits.Remove(coord);
+            if (BoardManager.Instance != null && BoardManager.Instance.TryGetTile(coord, out HexTile tile))
+            {
+                tile.IsOccupied = false;
+            }
+            PlayerEconomy.Instance?.AddGold(soldPrice);
+            return true;
         }
 
         /// <summary>

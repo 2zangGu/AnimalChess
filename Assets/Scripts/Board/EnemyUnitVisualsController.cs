@@ -85,9 +85,16 @@ namespace AnimalChess.Board
 
         private void RefreshExistingViews()
         {
-            foreach (var view in _views.Values)
+            foreach (var kvp in _views)
             {
-                if (view != null) view.RefreshVisual();
+                var view = kvp.Value;
+                if (view == null) continue;
+                view.RefreshVisual();
+
+                // BoardUnitVisualsController와 같은 이유로, isAlive 값을 매 프레임 그대로 반영해서
+                // 회색 반투명 표시가 실제 생사 상태와 어긋난 채로 남지 않게 한다.
+                var unit = kvp.Key;
+                if (unit != null) view.SetDefeated(!unit.isAlive);
             }
         }
 

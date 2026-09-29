@@ -18,6 +18,9 @@ namespace AnimalChess.Game
         public Text[] costOddsTexts;
 
         public Text goldText;
+        [Tooltip("골드 칸 바로 위에, 라운드가 끝날 때 받을 이자 골드를 미리 보여주는 텍스트 " +
+                 "(\"이자 +N\" 형태). PlayerEconomy.GetInterest()를 그대로 표시한다.")]
+        public Text interestText;
         [Tooltip("새로고침 버튼 라벨. ShopManager.RefreshCost 값이 바뀌어도 항상 최신 값으로 표시된다.")]
         public Text refreshCostText;
 
@@ -94,6 +97,9 @@ namespace AnimalChess.Game
 
             // 골드 칸에는 "골드"라는 글자 대신 동전 아이콘을 옆에 두므로, 텍스트는 숫자만 표시한다.
             if (goldText != null) goldText.text = economy.Gold.ToString();
+
+            // 골드 칸 위에, 지금 골드 기준으로 라운드가 끝날 때 받을 이자를 미리 보여준다.
+            if (interestText != null) interestText.text = $"이자 +{economy.GetInterest()}";
         }
     }
 }

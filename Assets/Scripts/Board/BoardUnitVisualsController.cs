@@ -86,9 +86,21 @@ namespace AnimalChess.Board
 
         private void RefreshExistingViews()
         {
-            foreach (var view in _views.Values)
+            foreach (var kvp in _views)
             {
-                if (view != null) view.RefreshVisual();
+                var view = kvp.Value;
+                if (view == null) continue;
+                view.RefreshVisual();
+
+                // 죽었다가(SetDefeated(true)) 라운드가 끝나 PlayerRoster.ProcessDeaths가 강등시켜
+                // isAlive를 다시 true로 되돌린 유닛은, 같은 UnitInstance가 같은 칸에 그대로 남기
+                // 때문에(RemoveStaleViews 기준으로는 "그대로 있는 유닛") 뷰가 파괴/재생성되지 않는다.
+                // 그래서 회색 반투명 표시가 다음 라운드 준비 단계까지 그대로 남아있던 버그가 있었다.
+                // 매 프레임 isAlive 값을 그대로 반영해주면, ProcessDeaths가 isAlive=true로 되돌리는
+                // 순간(다음 프레임) 바로 원래 텍스처로 복귀한다(SetDefeated는 상태가 실제로 바뀔
+                // 때만 색을 다시 칠하므로 매 프레임 불러도 비용 문제는 없다).
+                var unit = kvp.Key;
+                if (unit != null) view.SetDefeated(!unit.isAlive);
             }
         }
 

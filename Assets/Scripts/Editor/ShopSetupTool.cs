@@ -442,6 +442,7 @@ namespace AnimalChess.EditorTools
             if (existingPanel != null)
             {
                 EnsureGoldCoinIcon(existingPanel, font, statusUI);
+                EnsureInterestText(hudGO.transform, font, statusUI);
                 return;
             }
 
@@ -468,8 +469,35 @@ namespace AnimalChess.EditorTools
             goldBg.color = new Color(0.3f, 0.24f, 0.05f, 0.85f);
 
             EnsureGoldCoinIcon(goldPanel, font, statusUI);
+            EnsureInterestText(hudGO.transform, font, statusUI);
 
             MarkDirty(hudGO);
+        }
+
+        /// <summary>
+        /// 골드 칸(GoldPanel) 바로 위, 같은 x 범위에 "이자 +N" 텍스트를 한 줄 만든다.
+        /// 연승/연패 보너스는 의도적으로 없고, 그 대신 후반 골드 부족을 완화하려고 이자만 넣었다 -
+        /// 지금 골드로 라운드가 끝날 때 받을 이자가 얼만지 미리 보여준다(ShopStatusUI.Update가
+        /// PlayerEconomy.GetInterest()로 매 프레임 갱신). 이미 있으면 그대로 재사용한다(재실행 안전).
+        /// </summary>
+        private static void EnsureInterestText(Transform hudTransform, Font font, ShopStatusUI statusUI)
+        {
+            var existing = hudTransform.Find("InterestText");
+            Text interestText;
+            if (existing == null)
+            {
+                interestText = CreateText(hudTransform, "InterestText",
+                    new Vector2(1f, 0.5f), new Vector2(1f, 0.5f),
+                    new Vector2(-(16f + GoldPanelWidth), GoldPanelHeight / 2f + 2f),
+                    new Vector2(-16f, GoldPanelHeight / 2f + 20f),
+                    font, 13, FontStyle.Bold, TextAnchor.MiddleCenter, new Color(0.45f, 0.95f, 0.55f), "이자 +0");
+            }
+            else
+            {
+                interestText = existing.GetComponent<Text>();
+            }
+
+            if (statusUI != null) statusUI.interestText = interestText;
         }
 
         /// <summary>
@@ -1088,6 +1116,12 @@ namespace AnimalChess.EditorTools
             {
                 var slotUI = slot.GetComponent<BenchSlotUI>();
                 if (slotUI == null) continue;
+
+                // 칸 자체의 배경 Image(CreateBenchSlot에서 slotGO에 직접 붙인 것)를 연결해준다.
+                // 이미 만들어져 있던 씬(이 기능이 추가되기 전)에도 재실행만으로 코스트별 배경색이
+                // 적용되도록, 새로 만들 때와 기존 씬 백필 양쪽 다 여기서 한 번에 처리한다.
+                var slotBackground = slot.GetComponent<Image>();
+                if (slotBackground != null) slotUI.background = slotBackground;
 
                 var iconTransform = slot.Find("Icon");
                 Image icon;

@@ -94,12 +94,17 @@ namespace AnimalChess.Game
         {
             SetTileHoverEnabled(true);
             ClearHoveredTile();
+            SellZoneUI.Instance?.SetHover(false);
             DestroyDragIcon();
 
             var roster = PlayerRoster.Instance;
             if (roster != null)
             {
-                if (TryGetBenchSlotAt(mousePos, out int targetBenchIndex))
+                if (TryGetSellZoneAt(mousePos))
+                {
+                    SellDraggedUnit(roster);
+                }
+                else if (TryGetBenchSlotAt(mousePos, out int targetBenchIndex))
                 {
                     if (_dragSource == DragSource.Board)
                     {
@@ -128,6 +133,28 @@ namespace AnimalChess.Game
             _dragBenchIndex = -1;
         }
 
+        /// <summary>
+        /// 지금 드래그 중인 유닛(벤치 쪽이든 보드 쪽이든)을 판매 칸 규칙에 맞게 판다.
+        /// </summary>
+        private void SellDraggedUnit(PlayerRoster roster)
+        {
+            bool sold;
+            int price;
+            if (_dragSource == DragSource.Bench)
+            {
+                sold = roster.TrySellFromBench(_dragBenchIndex, out price);
+            }
+            else
+            {
+                sold = roster.TrySellFromBoard(_dragFromCoord, out price);
+            }
+
+            if (sold)
+            {
+                Debug.LogWarning($"[UnitDragController] 유닛 판매: {price}골드 획득");
+            }
+        }
+
         private void UpdateDragIconPosition(Vector2 mousePos)
         {
             if (_dragIconRect == null || _canvas == null) return;
@@ -138,8 +165,11 @@ namespace AnimalChess.Game
 
         private void UpdateHoverHighlight(Vector2 mousePos)
         {
+            bool overSellZone = TryGetSellZoneAt(mousePos);
+            SellZoneUI.Instance?.SetHover(overSellZone);
+
             HexTile hovered = null;
-            if (!TryGetBenchSlotAt(mousePos, out _))
+            if (!overSellZone && !TryGetBenchSlotAt(mousePos, out _))
             {
                 TryRaycastTile(mousePos, out hovered);
             }
@@ -222,6 +252,20 @@ namespace AnimalChess.Game
                 }
             }
             return false;
+        }
+
+        /// <summary>지금 마우스(또는 드래그 중인 유닛) 위치가 판매 칸(SellZoneUI) 위인지 확인한다.</summary>
+        private bool TryGetSellZoneAt(Vector2 screenPos)
+        {
+            var zone = SellZoneUI.Instance;
+            if (zone == null) return false;
+
+            var rect = zone.GetComponent<RectTransform>();
+            if (rect == null) return false;
+
+            var canvas = zone.GetComponentInParent<Canvas>();
+            var cam = (canvas != null && canvas.renderMode != RenderMode.ScreenSpaceOverlay) ? canvas.worldCamera : null;
+            return RectTransformUtility.RectangleContainsScreenPoint(rect, screenPos, cam);
         }
 
         private void EnsureBenchSlotsCache()

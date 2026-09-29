@@ -47,8 +47,9 @@ namespace AnimalChess.Game
 
         [Header("준비 시간")]
         [Tooltip("한 라운드마다 유닛을 배치할 수 있는 준비 시간(초). 이 시간이 다 되거나 " +
-                 "Start 버튼을 누르면(StartBattlePhase) 준비 단계가 끝난다.")]
-        public float prepTimeLimit = 30f;
+                 "Start 버튼을 누르면(StartBattlePhase) 준비 단계가 끝난다. " +
+                 "(원래 30초였는데 너무 짧다는 피드백이 있어서 60초로 늘렸다.)")]
+        public float prepTimeLimit = 60f;
 
         [Header("테스트용 (임시)")]
         [Tooltip("웨이브 클리어 판정 로직이 아직 없어서, 테스트로 '승리'를 시뮬레이션할 수 있게 " +

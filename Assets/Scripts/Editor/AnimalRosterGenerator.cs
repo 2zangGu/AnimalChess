@@ -16,6 +16,15 @@ namespace AnimalChess.EditorTools
     /// 이미 같은 이름의 애셋이 있으면 새로 만들지 않고 그 애셋의 값만 갱신한다 (재실행해도 안전).
     /// 성장 계통(1성/2성/3성)은 previousEvolution/nextEvolution으로 서로 연결해준다.
     ///
+    /// 성장 곡선 개별화(2026-09): 예전엔 "1성일 때부터 이미 다른 능력치는 다 같은데 공격력/공속만
+    /// 더 센" 라인(예: 강아지)이 있으면, 그 라인이 진화해도 같은 폭만큼 계속 앞서가기만 해서 다른
+    /// 라인(예: 개구리)이 절대 따라잡지 못하는 "아무 트레이드오프 없는 우위" 문제가 있었다. 이제는
+    /// 같은 코스트 안에서 1성 때 이미 평균보다 확실히 센 라인은 3성 최종 능력치의 성장폭을 줄이고,
+    /// 1성 때 평균보다 확실히 약한 라인은 3성 성장폭을 늘려서, 1성 때의 개성(강하게 시작하는 라인 /
+    /// 약하게 시작해서 크게 성장하는 라인)은 그대로 살리면서도 최종 3성끼리는 너무 벌어지지 않게 했다.
+    /// (강아지/개구리 예시: 강아지는 1성 때부터 세지만 3성에서 성장폭이 작고, 개구리는 1성 때 약한
+    /// 대신 3성에서 강아지와 맞먹거나 앞서도록 커진다.)
+    ///
     /// 메뉴: Tools > AnimalChess > 동물 로스터(50계통) 만들기
     /// </summary>
     public static class AnimalRosterGenerator
@@ -147,14 +156,40 @@ namespace AnimalChess.EditorTools
             // 데미지 하한(CombatManager.ResolveAttack의 Mathf.Max(10f, ...))을 두고 있는데,
             // 예전처럼 HP 8/공격 4/방어 2 같은 작은 숫자에서는 서식지/종족 %시너지 보너스가
             // 이 하한선에 묻혀 거의 체감이 안 됐다. 공속/사거리는 배율 문제와 무관해서 그대로 둔다.
+            //
+            // 코스트별 배율(CostPowerMultiplier)도 여기서 곱해준다 - 원래는 각 라인의 hpStar/
+            // atkStar/defStar를 코스트 구분 없이 같은 1~5 범위 안에서만 손으로 정했었는데, 그러다
+            // 보니 "1코스트치고 스탯이 센 라인"과 "3코스트치고 스탯이 약한 라인"이 겹쳐서(예: 1코
+            // 강아지 HP160/공격80이 3코 다람쥐 HP80/공격40보다 오히려 훨씬 셌음) "코스트가 높을수록
+            // 전체적으로 더 세야 한다"는 원칙이 깨졌었다. 코스트가 오를수록 커지는 배율을 곱해서
+            // 이 문제를 전체 로스터에 걸쳐 한 번에 바로잡는다.
+            float costMult = CostPowerMultiplier(line.cost);
             animal.baseStats = new UnitStats
             {
-                hp = row.hpStar * 80f,
-                attackPower = row.atkStar * 40f,
-                defense = row.defStar * 20f,
+                hp = row.hpStar * 80f * costMult,
+                attackPower = row.atkStar * 40f * costMult,
+                defense = row.defStar * 20f * costMult,
                 attackSpeed = row.aspdStar * 0.3f,
                 attackRange = row.range,
             };
+        }
+
+        /// <summary>
+        /// 코스트가 오를수록 커지는 HP/공격력/방어력 배율. 1코스트는 배율 1배(변화 없음)이고,
+        /// 5코스트까지 완만하게 커진다. 공속/사거리는 코스트와 무관한 "역할" 축이라 배율을
+        /// 적용하지 않는다.
+        /// </summary>
+        private static float CostPowerMultiplier(int cost)
+        {
+            switch (cost)
+            {
+                case 1: return 1.00f;
+                case 2: return 1.12f;
+                case 3: return 1.28f;
+                case 4: return 1.48f;
+                case 5: return 1.72f;
+                default: return 1.00f;
+            }
         }
 
         private static string Stars(int n)
@@ -185,7 +220,7 @@ namespace AnimalChess.EditorTools
                 designIntent = "밸런스형 근접",
                 star1 = new StarRow { name = "강아지", hpStar = 2, atkStar = 2, defStar = 1, aspdStar = 3, range = 1.0f },
                 star2 = new StarRow { name = "웰시 코기", hpStar = 3, atkStar = 3, defStar = 2, aspdStar = 3, range = 1.0f },
-                star3 = new StarRow { name = "도사견", hpStar = 4, atkStar = 4, defStar = 3, aspdStar = 2, range = 1.0f },
+                star3 = new StarRow { name = "도사견", hpStar = 4, atkStar = 3, defStar = 3, aspdStar = 2, range = 1.0f },
             });
             list.Add(new Line
             {
@@ -201,7 +236,7 @@ namespace AnimalChess.EditorTools
                 designIntent = "저비용 원거리",
                 star1 = new StarRow { name = "참새", hpStar = 1, atkStar = 1, defStar = 1, aspdStar = 4, range = 2.0f },
                 star2 = new StarRow { name = "어치", hpStar = 2, atkStar = 2, defStar = 1, aspdStar = 4, range = 3.0f },
-                star3 = new StarRow { name = "매", hpStar = 2, atkStar = 4, defStar = 1, aspdStar = 4, range = 4.0f },
+                star3 = new StarRow { name = "매", hpStar = 4, atkStar = 4, defStar = 1, aspdStar = 4, range = 4.0f },
             });
             list.Add(new Line
             {
@@ -225,7 +260,7 @@ namespace AnimalChess.EditorTools
                 // (3성은 "히든 강캐"답게 마지막에만 완만하게 느려지도록 1->2로 조정.)
                 star1 = new StarRow { name = "도마뱀", hpStar = 1, atkStar = 1, defStar = 2, aspdStar = 3, range = 1.0f },
                 star2 = new StarRow { name = "왕도마뱀", hpStar = 2, atkStar = 2, defStar = 3, aspdStar = 3, range = 1.0f },
-                star3 = new StarRow { name = "코모도왕도마뱀", hpStar = 4, atkStar = 4, defStar = 4, aspdStar = 2, range = 1.0f },
+                star3 = new StarRow { name = "코모도왕도마뱀", hpStar = 5, atkStar = 4, defStar = 4, aspdStar = 2, range = 1.0f },
             });
             list.Add(new Line
             {
@@ -244,7 +279,7 @@ namespace AnimalChess.EditorTools
                 designIntent = "물량형",
                 star1 = new StarRow { name = "정어리", hpStar = 1, atkStar = 1, defStar = 1, aspdStar = 3, range = 1.0f },
                 star2 = new StarRow { name = "꽁치", hpStar = 2, atkStar = 2, defStar = 1, aspdStar = 3, range = 1.0f },
-                star3 = new StarRow { name = "삼치", hpStar = 3, atkStar = 3, defStar = 2, aspdStar = 3, range = 1.0f },
+                star3 = new StarRow { name = "삼치", hpStar = 5, atkStar = 3, defStar = 2, aspdStar = 3, range = 1.0f },
             });
             list.Add(new Line
             {
@@ -254,8 +289,11 @@ namespace AnimalChess.EditorTools
                 star1 = new StarRow { name = "빙어", hpStar = 2, atkStar = 1, defStar = 1, aspdStar = 2, range = 1.0f },
                 // 원래 1성(빙어)과 hp/공격/방어가 완전히 같아서(공속만 +1) 진화해도 사실상
                 // 아무것도 안 세지는 셈이었다. 방어만 1->2로 올려서 최소한의 실질 성장을 줬다.
-                star2 = new StarRow { name = "열빙어", hpStar = 2, atkStar = 1, defStar = 2, aspdStar = 3, range = 1.0f },
-                star3 = new StarRow { name = "은어", hpStar = 2, atkStar = 2, defStar = 2, aspdStar = 3, range = 1.0f },
+                // (이후 발견: 그렇게 고쳐도 hp가 1성부터 3성까지 계속 2에 머물러 있어서 - 같은
+                // 1코스트 2성인 웰시 코기(체력240)에 비해 열빙어(체력160)가 지나치게 약했다.
+                // hp/공격력이 성장 단계마다 확실히 오르도록 열빙어/은어를 한 번 더 올렸다.)
+                star2 = new StarRow { name = "열빙어", hpStar = 3, atkStar = 2, defStar = 2, aspdStar = 3, range = 1.0f },
+                star3 = new StarRow { name = "은어", hpStar = 4, atkStar = 3, defStar = 2, aspdStar = 3, range = 1.0f },
             });
             list.Add(new Line
             {
@@ -275,7 +313,7 @@ namespace AnimalChess.EditorTools
                 designIntent = "저비용 몸빵",
                 star1 = new StarRow { name = "개미", hpStar = 2, atkStar = 1, defStar = 2, aspdStar = 2, range = 1.0f },
                 star2 = new StarRow { name = "사슴벌레", hpStar = 3, atkStar = 2, defStar = 3, aspdStar = 2, range = 1.0f },
-                star3 = new StarRow { name = "장수풍뎅이", hpStar = 4, atkStar = 3, defStar = 4, aspdStar = 2, range = 1.0f },
+                star3 = new StarRow { name = "장수풍뎅이", hpStar = 3, atkStar = 3, defStar = 4, aspdStar = 2, range = 1.0f },
             });
 
             // ===== 2코스트 =====
@@ -285,7 +323,7 @@ namespace AnimalChess.EditorTools
                 designIntent = "밸런스 공격형",
                 star1 = new StarRow { name = "여우", hpStar = 2, atkStar = 2, defStar = 1, aspdStar = 3, range = 1.0f },
                 star2 = new StarRow { name = "붉은여우", hpStar = 3, atkStar = 3, defStar = 2, aspdStar = 3, range = 1.0f },
-                star3 = new StarRow { name = "은여우", hpStar = 4, atkStar = 4, defStar = 2, aspdStar = 4, range = 1.0f },
+                star3 = new StarRow { name = "은여우", hpStar = 3, atkStar = 4, defStar = 2, aspdStar = 4, range = 1.0f },
             });
             list.Add(new Line
             {
@@ -293,7 +331,7 @@ namespace AnimalChess.EditorTools
                 designIntent = "물량 몸빵형",
                 star1 = new StarRow { name = "미어캣", hpStar = 2, atkStar = 1, defStar = 2, aspdStar = 3, range = 1.0f },
                 star2 = new StarRow { name = "몽구스", hpStar = 3, atkStar = 2, defStar = 3, aspdStar = 3, range = 1.0f },
-                star3 = new StarRow { name = "오소리", hpStar = 4, atkStar = 3, defStar = 4, aspdStar = 2, range = 1.0f },
+                star3 = new StarRow { name = "오소리", hpStar = 3, atkStar = 3, defStar = 4, aspdStar = 2, range = 1.0f },
             });
             list.Add(new Line
             {
@@ -309,7 +347,7 @@ namespace AnimalChess.EditorTools
                 designIntent = "종족+서식지 이중시너지 예시",
                 star1 = new StarRow { name = "펭귄", hpStar = 2, atkStar = 1, defStar = 2, aspdStar = 2, range = 1.0f },
                 star2 = new StarRow { name = "젠투펭귄", hpStar = 3, atkStar = 2, defStar = 3, aspdStar = 2, range = 1.0f },
-                star3 = new StarRow { name = "황제펭귄", hpStar = 4, atkStar = 3, defStar = 4, aspdStar = 2, range = 1.0f },
+                star3 = new StarRow { name = "황제펭귄", hpStar = 3, atkStar = 3, defStar = 4, aspdStar = 2, range = 1.0f },
             });
             list.Add(new Line
             {
@@ -317,7 +355,7 @@ namespace AnimalChess.EditorTools
                 designIntent = "밸런스 파충류",
                 star1 = new StarRow { name = "아놀도마뱀", hpStar = 1, atkStar = 1, defStar = 2, aspdStar = 3, range = 1.0f },
                 star2 = new StarRow { name = "이구아나", hpStar = 2, atkStar = 2, defStar = 3, aspdStar = 3, range = 1.0f },
-                star3 = new StarRow { name = "가시이구아나", hpStar = 3, atkStar = 3, defStar = 4, aspdStar = 3, range = 1.0f },
+                star3 = new StarRow { name = "가시이구아나", hpStar = 4, atkStar = 3, defStar = 4, aspdStar = 3, range = 1.0f },
             });
             list.Add(new Line
             {
@@ -331,9 +369,12 @@ namespace AnimalChess.EditorTools
             {
                 species = Species.Fish, habitat = Habitat.Sea, cost = 2,
                 designIntent = "공속형",
-                star1 = new StarRow { name = "고등어", hpStar = 1, atkStar = 1, defStar = 1, aspdStar = 3, range = 1.0f },
-                star2 = new StarRow { name = "전갱이", hpStar = 2, atkStar = 2, defStar = 1, aspdStar = 4, range = 1.0f },
-                star3 = new StarRow { name = "가다랑어", hpStar = 3, atkStar = 3, defStar = 2, aspdStar = 4, range = 1.0f },
+                // 원래 1성(고등어)이 hp1/공격1/방어1로 전체 로스터 통틀어 가장 낮은 조합이라
+                // 같은 2코스트의 다른 라인들보다 눈에 띄게 약했다. hp를 한 단계씩 올려서
+                // (2성/3성도 같은 폭으로) 2코스트다운 기본기를 갖추게 했다.
+                star1 = new StarRow { name = "고등어", hpStar = 2, atkStar = 1, defStar = 1, aspdStar = 3, range = 1.0f },
+                star2 = new StarRow { name = "전갱이", hpStar = 3, atkStar = 2, defStar = 1, aspdStar = 4, range = 1.0f },
+                star3 = new StarRow { name = "가다랑어", hpStar = 4, atkStar = 3, defStar = 2, aspdStar = 4, range = 1.0f },
             });
             list.Add(new Line
             {
@@ -349,7 +390,7 @@ namespace AnimalChess.EditorTools
                 designIntent = "재생형 밸런스",
                 star1 = new StarRow { name = "도롱뇽", hpStar = 1, atkStar = 1, defStar = 2, aspdStar = 2, range = 1.0f },
                 star2 = new StarRow { name = "불도롱뇽", hpStar = 2, atkStar = 2, defStar = 3, aspdStar = 2, range = 1.0f },
-                star3 = new StarRow { name = "왕도롱뇽", hpStar = 4, atkStar = 2, defStar = 4, aspdStar = 2, range = 1.0f },
+                star3 = new StarRow { name = "왕도롱뇽", hpStar = 5, atkStar = 2, defStar = 4, aspdStar = 2, range = 1.0f },
             });
             list.Add(new Line
             {
@@ -375,15 +416,20 @@ namespace AnimalChess.EditorTools
                 designIntent = "탱커형",
                 star1 = new StarRow { name = "메기", hpStar = 3, atkStar = 1, defStar = 2, aspdStar = 1, range = 1.0f },
                 star2 = new StarRow { name = "큰메기", hpStar = 4, atkStar = 2, defStar = 3, aspdStar = 1, range = 1.0f },
-                star3 = new StarRow { name = "자이언트메기", hpStar = 5, atkStar = 3, defStar = 4, aspdStar = 1, range = 1.0f },
+                star3 = new StarRow { name = "자이언트메기", hpStar = 4, atkStar = 3, defStar = 4, aspdStar = 1, range = 1.0f },
             });
             list.Add(new Line
             {
                 species = Species.Mammal, habitat = Habitat.Forest, cost = 3,
                 designIntent = "회피/스피드형",
-                star1 = new StarRow { name = "다람쥐", hpStar = 1, atkStar = 1, defStar = 1, aspdStar = 4, range = 1.0f },
-                star2 = new StarRow { name = "청설모", hpStar = 2, atkStar = 2, defStar = 1, aspdStar = 5, range = 1.0f },
-                star3 = new StarRow { name = "하늘다람쥐", hpStar = 2, atkStar = 3, defStar = 1, aspdStar = 5, range = 2.0f },
+                // 코스트별 배율(CostPowerMultiplier)을 곱해도, 원래 hp1/atk1/def1(전체 50계통 중
+                // 가장 낮은 조합)이라 1코스트 강아지(hp2/atk2/def1)보다도 약해서 "3코스트인데 1코스트
+                // 보다 약하다"는 문제가 있었다. hp/atk을 +1씩 올려 3코스트다운 기본기를 갖추게 하고,
+                // 낮은 방어력으로 대신 빠른 공속(회피/스피드형 컨셉)을 유지했다. 2성/3성도 같은 폭으로
+                // 올려서 진화 성장폭 자체는 그대로 유지된다.
+                star1 = new StarRow { name = "다람쥐", hpStar = 2, atkStar = 2, defStar = 1, aspdStar = 4, range = 1.0f },
+                star2 = new StarRow { name = "청설모", hpStar = 3, atkStar = 3, defStar = 1, aspdStar = 5, range = 1.0f },
+                star3 = new StarRow { name = "하늘다람쥐", hpStar = 3, atkStar = 4, defStar = 1, aspdStar = 5, range = 2.0f },
             });
             list.Add(new Line
             {
@@ -405,9 +451,12 @@ namespace AnimalChess.EditorTools
             {
                 species = Species.Bird, habitat = Habitat.Grassland, cost = 3,
                 designIntent = "화려한 중간티어",
-                star1 = new StarRow { name = "공작", hpStar = 1, atkStar = 2, defStar = 1, aspdStar = 3, range = 2.0f },
-                star2 = new StarRow { name = "금계", hpStar = 2, atkStar = 3, defStar = 1, aspdStar = 3, range = 3.0f },
-                star3 = new StarRow { name = "극락조", hpStar = 2, atkStar = 4, defStar = 1, aspdStar = 4, range = 3.0f },
+                // hp1이라 같은 3코스트의 다른 원거리 라인(가마우지 hp2 등)보다도 약했고, 배율을
+                // 곱혀도 1코스트 강아지보다 약한 문제가 있었다. hp만 +1 올려 같은 코스트의 다른
+                // 라인들과 비슷한 수준으로 맞췄다(2성/3성도 같은 폭으로 올림).
+                star1 = new StarRow { name = "공작", hpStar = 2, atkStar = 2, defStar = 1, aspdStar = 3, range = 2.0f },
+                star2 = new StarRow { name = "금계", hpStar = 3, atkStar = 3, defStar = 1, aspdStar = 3, range = 3.0f },
+                star3 = new StarRow { name = "극락조", hpStar = 3, atkStar = 4, defStar = 1, aspdStar = 4, range = 3.0f },
             });
             list.Add(new Line
             {
@@ -415,7 +464,7 @@ namespace AnimalChess.EditorTools
                 designIntent = "중간티어 탱커",
                 star1 = new StarRow { name = "자라", hpStar = 3, atkStar = 1, defStar = 3, aspdStar = 1, range = 1.0f },
                 star2 = new StarRow { name = "왕자라", hpStar = 4, atkStar = 2, defStar = 4, aspdStar = 1, range = 1.0f },
-                star3 = new StarRow { name = "악어거북", hpStar = 5, atkStar = 3, defStar = 5, aspdStar = 1, range = 1.0f },
+                star3 = new StarRow { name = "악어거북", hpStar = 4, atkStar = 3, defStar = 5, aspdStar = 1, range = 1.0f },
             });
             list.Add(new Line
             {
@@ -431,7 +480,7 @@ namespace AnimalChess.EditorTools
                 designIntent = "독성 몸빵",
                 star1 = new StarRow { name = "두꺼비", hpStar = 2, atkStar = 1, defStar = 2, aspdStar = 1, range = 1.0f },
                 star2 = new StarRow { name = "물두꺼비", hpStar = 3, atkStar = 2, defStar = 3, aspdStar = 1, range = 1.0f },
-                star3 = new StarRow { name = "왕두꺼비", hpStar = 4, atkStar = 2, defStar = 4, aspdStar = 1, range = 1.0f },
+                star3 = new StarRow { name = "왕두꺼비", hpStar = 4, atkStar = 3, defStar = 4, aspdStar = 1, range = 1.0f },
             });
             list.Add(new Line
             {
@@ -465,7 +514,7 @@ namespace AnimalChess.EditorTools
                 designIntent = "고HP고공격",
                 star1 = new StarRow { name = "악어", hpStar = 3, atkStar = 3, defStar = 3, aspdStar = 1, range = 1.0f },
                 star2 = new StarRow { name = "나일악어", hpStar = 4, atkStar = 4, defStar = 3, aspdStar = 1, range = 1.0f },
-                star3 = new StarRow { name = "바다악어", hpStar = 5, atkStar = 5, defStar = 4, aspdStar = 1, range = 1.0f },
+                star3 = new StarRow { name = "바다악어", hpStar = 4, atkStar = 5, defStar = 4, aspdStar = 1, range = 1.0f },
             });
             list.Add(new Line
             {
@@ -473,7 +522,7 @@ namespace AnimalChess.EditorTools
                 designIntent = "우아한 원거리 지원",
                 star1 = new StarRow { name = "홍학", hpStar = 2, atkStar = 2, defStar = 1, aspdStar = 3, range = 3.0f },
                 star2 = new StarRow { name = "왜가리", hpStar = 3, atkStar = 3, defStar = 2, aspdStar = 3, range = 3.0f },
-                star3 = new StarRow { name = "두루미", hpStar = 3, atkStar = 4, defStar = 2, aspdStar = 3, range = 4.0f },
+                star3 = new StarRow { name = "두루미", hpStar = 4, atkStar = 4, defStar = 2, aspdStar = 3, range = 4.0f },
             });
             list.Add(new Line
             {
@@ -481,7 +530,7 @@ namespace AnimalChess.EditorTools
                 designIntent = "숲 견제 원거리",
                 star1 = new StarRow { name = "앵무새", hpStar = 2, atkStar = 2, defStar = 1, aspdStar = 4, range = 2.0f },
                 star2 = new StarRow { name = "금강앵무", hpStar = 3, atkStar = 3, defStar = 2, aspdStar = 4, range = 3.0f },
-                star3 = new StarRow { name = "코뿔새", hpStar = 3, atkStar = 4, defStar = 3, aspdStar = 4, range = 3.0f },
+                star3 = new StarRow { name = "코뿔새", hpStar = 4, atkStar = 4, defStar = 3, aspdStar = 4, range = 3.0f },
             });
             list.Add(new Line
             {
@@ -499,7 +548,7 @@ namespace AnimalChess.EditorTools
                 // 1성(흰동가리)에서 바로 공속이 떨어지던 걸(2->1) 1성과 같게 유지해서, "덩치 커지며
                 // 느려지는" 느낌은 마지막 진화(3성)에서만 나오게 했다(다른 라인들과 같은 패턴).
                 star2 = new StarRow { name = "쥐가오리", hpStar = 4, atkStar = 2, defStar = 3, aspdStar = 2, range = 1.0f },
-                star3 = new StarRow { name = "만타가오리", hpStar = 5, atkStar = 2, defStar = 4, aspdStar = 1, range = 1.0f },
+                star3 = new StarRow { name = "만타가오리", hpStar = 5, atkStar = 4, defStar = 4, aspdStar = 1, range = 1.0f },
             });
             list.Add(new Line
             {
@@ -515,15 +564,17 @@ namespace AnimalChess.EditorTools
                 designIntent = "극지 생존형",
                 star1 = new StarRow { name = "청개구리", hpStar = 2, atkStar = 1, defStar = 1, aspdStar = 3, range = 1.0f },
                 star2 = new StarRow { name = "산개구리", hpStar = 3, atkStar = 2, defStar = 2, aspdStar = 3, range = 1.0f },
-                star3 = new StarRow { name = "북방산개구리", hpStar = 4, atkStar = 2, defStar = 3, aspdStar = 3, range = 1.0f },
+                star3 = new StarRow { name = "북방산개구리", hpStar = 4, atkStar = 4, defStar = 3, aspdStar = 3, range = 1.0f },
             });
             list.Add(new Line
             {
                 species = Species.Insect, habitat = Habitat.Forest, cost = 4,
                 designIntent = "고공격 독딜러",
-                star1 = new StarRow { name = "땅벌", hpStar = 1, atkStar = 3, defStar = 1, aspdStar = 4, range = 1.0f },
-                star2 = new StarRow { name = "말벌", hpStar = 2, atkStar = 4, defStar = 1, aspdStar = 4, range = 1.0f },
-                star3 = new StarRow { name = "장수말벌", hpStar = 2, atkStar = 5, defStar = 2, aspdStar = 4, range = 1.0f },
+                // hp/방어가 4코스트 전체에서 계속 가장 낮은 축(1성/2성/3성 내내 이 라인이 꼴찌)이라
+                // "고공격" 컨셉을 살리는 공격력은 그대로 두고 hp/방어만 한 단계씩 올렸다.
+                star1 = new StarRow { name = "땅벌", hpStar = 2, atkStar = 3, defStar = 2, aspdStar = 4, range = 1.0f },
+                star2 = new StarRow { name = "말벌", hpStar = 3, atkStar = 4, defStar = 2, aspdStar = 4, range = 1.0f },
+                star3 = new StarRow { name = "장수말벌", hpStar = 3, atkStar = 5, defStar = 3, aspdStar = 4, range = 1.0f },
             });
 
             // ===== 5코스트 =====
@@ -533,7 +584,7 @@ namespace AnimalChess.EditorTools
                 designIntent = "최고 공속+사거리",
                 star1 = new StarRow { name = "독수리", hpStar = 2, atkStar = 3, defStar = 1, aspdStar = 4, range = 3.0f },
                 star2 = new StarRow { name = "검독수리", hpStar = 2, atkStar = 4, defStar = 1, aspdStar = 5, range = 3.5f },
-                star3 = new StarRow { name = "흰머리독수리", hpStar = 3, atkStar = 5, defStar = 2, aspdStar = 5, range = 4.0f },
+                star3 = new StarRow { name = "흰머리독수리", hpStar = 4, atkStar = 5, defStar = 2, aspdStar = 5, range = 4.0f },
             });
             list.Add(new Line
             {
@@ -597,9 +648,14 @@ namespace AnimalChess.EditorTools
             {
                 species = Species.Amphibian, habitat = Habitat.Forest, cost = 5,
                 designIntent = "작지만 치명적인 독딜러",
-                star1 = new StarRow { name = "딸기독개구리", hpStar = 1, atkStar = 3, defStar = 1, aspdStar = 3, range = 1.0f },
-                star2 = new StarRow { name = "코발트독개구리", hpStar = 1, atkStar = 4, defStar = 1, aspdStar = 4, range = 1.0f },
-                star3 = new StarRow { name = "황금독개구리", hpStar = 2, atkStar = 5, defStar = 1, aspdStar = 4, range = 1.0f },
+                // 배율(1.72배)을 곱혀도 3코스트 최상위 라인들보다 약해서 "5코스트인데 3코스트보다
+                // 약하다"는 문제가 있었다. hp는 "작지만"이라는 컨셉을 살려 그대로 두고, 공격력만
+                // +1 올려 5코스트 독딜러다운 화력을 갖추게 했다(2성/3성도 같은 폭으로 올림).
+                // (이후 발견: 그렇게 고쳐도 같은 5코스트 안에서는 여전히 매 성장 단계마다 가장
+                // 약한 라인이었다. 공격력은 이미 충분히 높으니 hp를 한 단계씩 더 올렸다.)
+                star1 = new StarRow { name = "딸기독개구리", hpStar = 2, atkStar = 4, defStar = 1, aspdStar = 3, range = 1.0f },
+                star2 = new StarRow { name = "코발트독개구리", hpStar = 2, atkStar = 5, defStar = 1, aspdStar = 4, range = 1.0f },
+                star3 = new StarRow { name = "황금독개구리", hpStar = 3, atkStar = 6, defStar = 1, aspdStar = 4, range = 1.0f },
             });
             list.Add(new Line
             {
@@ -607,7 +663,7 @@ namespace AnimalChess.EditorTools
                 designIntent = "최상위 몸빵형 곤충",
                 star1 = new StarRow { name = "비단벌레", hpStar = 2, atkStar = 2, defStar = 2, aspdStar = 2, range = 1.0f },
                 star2 = new StarRow { name = "헤라클레스장수풍뎅이", hpStar = 4, atkStar = 3, defStar = 4, aspdStar = 2, range = 1.0f },
-                star3 = new StarRow { name = "타이탄하늘소", hpStar = 5, atkStar = 4, defStar = 5, aspdStar = 2, range = 1.0f },
+                star3 = new StarRow { name = "타이탄하늘소", hpStar = 6, atkStar = 4, defStar = 5, aspdStar = 2, range = 1.0f },
             });
             return list;
         }

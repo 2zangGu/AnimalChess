@@ -35,6 +35,12 @@ namespace AnimalChess.Game
         [Tooltip("라운드 전투가 끝났을 때, 살아남은 내 유닛 한 마리당 추가로 지급되는 골드")]
         public int goldPerSurvivingUnit = 1;
 
+        [Header("이자")]
+        [Tooltip("지금 가진 골드 이 값(기본 10)당 1골드를 이자로 받는다. 연승/연패 보너스는 의도적으로 " +
+                 "만들지 않고, 그 대신 후반 골드 부족을 완화하기 위한 장치로 이자만 넣는다. 상한 없음 " +
+                 "(예: 200골드 보유 중이면 이자 20골드).")]
+        public int goldPerInterest = 10;
+
         public int Level { get; private set; }
         public int CurrentXP { get; private set; }
         public int Gold { get; private set; }
@@ -91,12 +97,25 @@ namespace AnimalChess.Game
         }
 
         /// <summary>
+        /// 지금 가진 골드 기준으로 받을 수 있는 이자를 계산한다(goldPerInterest 골드당 1골드,
+        /// 상한 없음). 라운드가 끝나기 전 상점 UI에서 "다음에 받을 이자가 얼마인지" 미리
+        /// 보여줄 때도 이 값을 그대로 쓴다.
+        /// </summary>
+        public int GetInterest()
+        {
+            if (goldPerInterest <= 0) return 0;
+            return Gold / goldPerInterest;
+        }
+
+        /// <summary>
         /// 라운드 하나가 끝났을 때 RoundManager가 호출해준다.
-        /// 고정 골드(goldPerRound) + 생존 유닛 수 * goldPerSurvivingUnit 만큼 지급한다.
+        /// 고정 골드(goldPerRound) + 생존 유닛 수 * goldPerSurvivingUnit + 이자(GetInterest)
+        /// 만큼 지급한다. 이자는 이번 라운드 수입을 더하기 "전" 보유 골드 기준으로 계산한다.
         /// </summary>
         public void GrantRoundEndGold(int aliveUnitCount)
         {
-            int amount = goldPerRound + Mathf.Max(0, aliveUnitCount) * goldPerSurvivingUnit;
+            int interest = GetInterest();
+            int amount = goldPerRound + Mathf.Max(0, aliveUnitCount) * goldPerSurvivingUnit + interest;
             AddGold(amount);
         }
 

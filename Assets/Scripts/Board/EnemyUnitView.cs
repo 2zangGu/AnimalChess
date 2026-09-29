@@ -21,7 +21,6 @@ namespace AnimalChess.Board
 
         private static Material _sharedSpriteMaterial;
         private static readonly int BaseMapId = Shader.PropertyToID("_BaseMap");
-        private static readonly int BaseColorId = Shader.PropertyToID("_BaseColor");
 
         private Transform _spriteQuad;
         private MeshRenderer _spriteRenderer;
@@ -158,18 +157,17 @@ namespace AnimalChess.Board
         }
 
         /// <summary>
-        /// 전투 중 이 유닛이 죽은 것으로 처리되면(CombatManager) 스프라이트를 회색으로 물들인다.
-        /// 실제 제거는 다음 웨이브가 스폰될 때(EnemySpawner.ClearBoard) 처리되므로, 여기서는
-        /// 순수하게 눈에 보이는 표시만 바꾼다.
+        /// 전투 중 이 유닛이 죽은 것으로 처리되면(CombatManager) 스프라이트를 아예 꺼서 잔상 없이
+        /// 사라지게 한다. 플레이어 유닛(BoardUnitView)은 죽어도 회색 반투명으로 잠깐 남겨서 "누가
+        /// 죽었는지" 보여주지만, 적 유닛은 그럴 필요가 없어서 그냥 즉시 안 보이게 처리한다.
+        /// 실제 제거(오브젝트 파괴)는 다음 웨이브가 스폰될 때(EnemySpawner.ClearBoard) 처리되므로,
+        /// 여기서는 순수하게 눈에 보이는 표시만 바꾼다.
         /// </summary>
         public void SetDefeated(bool defeated)
         {
             if (_isDefeated == defeated || _spriteRenderer == null) return;
             _isDefeated = defeated;
-
-            _spriteRenderer.GetPropertyBlock(_mpb);
-            _mpb.SetColor(BaseColorId, defeated ? new Color(0.35f, 0.35f, 0.35f, 0.85f) : Color.white);
-            _spriteRenderer.SetPropertyBlock(_mpb);
+            _spriteRenderer.enabled = !defeated;
         }
 
         private void BuildSpriteQuad()
