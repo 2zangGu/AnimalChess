@@ -2465,8 +2465,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AnimalChess.Game.EnemySpawner
   meleeRangeThreshold: 1.5
-  baseWaveSize: 2
-  roundsPerExtraEnemy: 1
+  baseWaveSize: 1
+  roundsPerExtraEnemy: 2
 --- !u!4 &402879863
 Transform:
   m_ObjectHideFlags: 0

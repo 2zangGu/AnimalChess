@@ -157,7 +157,8 @@ namespace AnimalChess.Board
                 go.transform.localScale = Vector3.one * 0.12f * sizeScale;
 
                 var renderer = go.GetComponent<MeshRenderer>();
-                renderer.sharedMaterial = AttackEffects.SharedMaterial;
+                // 발광 머티리얼로 바꿔서 파편이 튀는 순간이 더 밝고 또렷하게 보이게 한다.
+                renderer.sharedMaterial = AttackEffects.SharedGlowMaterial;
                 renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
                 renderer.receiveShadows = false;
 
@@ -206,7 +207,8 @@ namespace AnimalChess.Board
         private float _maxRadius;
         private Color _color;
 
-        public void Setup(float sizeScale, Color color)
+        /// <summary>sizeScale과 별개로 링 두께만 키우는 배율(별 단계가 높을수록 더 두껍고 선명하게).</summary>
+        public void Setup(float sizeScale, Color color, float widthScale = 1f)
         {
             _maxRadius = 0.55f * sizeScale;
             _color = color;
@@ -215,12 +217,13 @@ namespace AnimalChess.Board
             _line.useWorldSpace = false;
             _line.loop = true;
             _line.positionCount = 20;
-            _line.widthMultiplier = 0.04f;
+            _line.widthMultiplier = 0.04f * widthScale;
             _line.numCapVertices = 2;
             _line.numCornerVertices = 2;
             _line.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
             _line.receiveShadows = false;
-            _line.sharedMaterial = AttackEffects.SharedMaterial;
+            // 발광 머티리얼로 바꿔서 진화 링이 더 선명하게 빛나 보이게 한다.
+            _line.sharedMaterial = AttackEffects.SharedGlowMaterial;
 
             var mpb = new MaterialPropertyBlock();
             mpb.SetColor(BaseColorId, color);
@@ -266,13 +269,15 @@ namespace AnimalChess.Board
         private float _sizeScale;
         private Color _color;
         private float _delay;
+        private float _widthScale;
 
-        public void Setup(Vector3 pos, float sizeScale, Color color, float delay)
+        public void Setup(Vector3 pos, float sizeScale, Color color, float delay, float widthScale = 1f)
         {
             _pos = pos;
             _sizeScale = sizeScale;
             _color = color;
             _delay = delay;
+            _widthScale = widthScale;
         }
 
         private void Update()
@@ -283,7 +288,7 @@ namespace AnimalChess.Board
             var ringGO = new GameObject("FlourishRing");
             ringGO.transform.position = _pos;
             var ring = ringGO.AddComponent<AttackRingExpandMotion>();
-            ring.Setup(_sizeScale * 1.3f, _color);
+            ring.Setup(_sizeScale * 1.3f, _color, _widthScale);
 
             Destroy(gameObject);
         }

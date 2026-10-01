@@ -41,13 +41,26 @@ namespace AnimalChess.Board
             public float sizeScale;
             public bool glowRing;
             public bool extraFlourish;
+            /// <summary>히트 플래시 중심부를 흰색 쪽으로 얼마나 섞을지(0=원래 색, 1=완전 흰색).
+            /// 별 단계가 높을수록 "더 뜨겁고 강한" 타격으로 보이게 값을 키운다.</summary>
+            public float flashWhiteBlend;
+            /// <summary>진화 링(LineRenderer) 두께 배율. 별 단계가 높을수록 두껍고 선명하게 보이게 한다.</summary>
+            public float ringWidthScale;
         }
 
         private static Material _sharedMaterial;
+        private static Material _sharedGlowMaterial;
         private static readonly int BaseColorId = Shader.PropertyToID("_BaseColor");
 
         /// <summary>다른 이펙트 조각(AttackEffectMotions)에서도 같은 공유 머티리얼을 쓰기 위한 공개 접근자.</summary>
         internal static Material SharedMaterial => GetOrCreateMaterial();
+
+        /// <summary>
+        /// 타격 이펙트(플래시/파티클/링)에 쓰는 "발광" 머티리얼. 일반 알파 블렌딩 대신
+        /// (SrcAlpha, One) 소프트 애디티브 블렌딩을 써서, 어두운 보드 배경 위에서 겹칠수록
+        /// 더 밝게 빛나 보이게 만든다 - 사용자가 요청한 "더 선명한 공격 이펙트"의 핵심.
+        /// </summary>
+        internal static Material SharedGlowMaterial => GetOrCreateGlowMaterial();
 
         /// <summary>
         /// attackerCoord에서 targetCoord를 공격하는 이펙트를 재생한다. 두 좌표 모두 실제 타일이
@@ -126,15 +139,34 @@ namespace AnimalChess.Board
                 baseColor = Color.white;
             }
 
+            // 지정된 색이 다소 탁하더라도(파스텔톤 등) 채도/명도를 끌어올려서 항상 또렷하고
+            // 선명하게 보이게 한다. 색상(Hue)은 그대로 유지하므로 종족/서식지별 구분은 그대로다.
+            baseColor = Vivid(baseColor);
+
             int star = Mathf.Clamp(style.starLevel, 1, 3);
             return new VisualStyle
             {
                 color = baseColor,
-                particleCount = star == 1 ? 4 : star == 2 ? 7 : 10,
-                sizeScale = star == 1 ? 1f : star == 2 ? 1.3f : 1.6f,
+                // 별 단계가 오를수록 파티클/크기/링 두께/타격 플래시의 "뜨거운" 정도가 전부 눈에
+                // 띄게 커지도록 격차를 크게 벌렸다(기존엔 1★->3★ 차이가 미미했다).
+                particleCount = star == 1 ? 5 : star == 2 ? 9 : 15,
+                sizeScale = star == 1 ? 1f : star == 2 ? 1.5f : 2.1f,
                 glowRing = star >= 2,
                 extraFlourish = star >= 3,
+                flashWhiteBlend = star == 1 ? 0f : star == 2 ? 0.25f : 0.5f,
+                ringWidthScale = star == 1 ? 1f : star == 2 ? 1.25f : 1.6f,
             };
+        }
+
+        /// <summary>채도와 명도의 하한을 올려서 색을 더 선명하게 만든다(색상 자체는 유지).</summary>
+        private static Color Vivid(Color c)
+        {
+            Color.RGBToHSV(c, out float h, out float s, out float v);
+            s = Mathf.Clamp01(Mathf.Max(s, 0.7f) * 1.15f);
+            v = Mathf.Clamp01(Mathf.Max(v, 0.9f));
+            var result = Color.HSVToRGB(h, s, v);
+            result.a = c.a;
+            return result;
         }
 
         private static void PlayMelee(Vector3 from, Vector3 to, VisualStyle visual)
@@ -145,7 +177,8 @@ namespace AnimalChess.Board
             dir.Normalize();
             Vector3 lungeTarget = from + dir * 0.6f;
 
-            var lungeGO = SpawnQuad("MeleeLunge", from, 0.35f * visual.sizeScale, visual.color);
+            // 발광 머티리얼(SharedGlowMaterial)로 바꿔서 돌진 잔상 자체도 선명하게 빛나 보이게 한다.
+            var lungeGO = SpawnQuad("MeleeLunge", from, 0.35f * visual.sizeScale, visual.color, glow: true);
             lungeGO.AddComponent<AttackLungeMotion>().Setup(from, lungeTarget, 0.18f);
 
             SpawnHitFlash(to, visual);
@@ -153,15 +186,20 @@ namespace AnimalChess.Board
 
         private static void PlayRanged(Vector3 from, Vector3 to, VisualStyle visual)
         {
-            var projGO = SpawnQuad("Projectile", from, 0.22f * visual.sizeScale, visual.color);
+            var projGO = SpawnQuad("Projectile", from, 0.22f * visual.sizeScale, visual.color, glow: true);
             float travelTime = Mathf.Clamp(Vector3.Distance(from, to) * 0.05f, 0.08f, 0.4f);
             projGO.AddComponent<AttackProjectileMotion>().Setup(from, to, travelTime, () => SpawnHitFlash(to, visual));
         }
 
         private static void SpawnHitFlash(Vector3 pos, VisualStyle visual)
         {
-            var flashGO = SpawnQuad("HitFlash", pos, 0.5f * visual.sizeScale, visual.color);
-            flashGO.AddComponent<AttackFadeScaleMotion>().Setup(0.25f, 1.6f);
+            // 타격 중심부는 별 단계에 따라 흰색 쪽으로 더 섞어서(flashWhiteBlend), 진화할수록
+            // 더 뜨겁고 강렬한 한방으로 보이게 한다. 발광 머티리얼과 합쳐져 훨씬 또렷하게 읽힌다.
+            Color flashColor = Color.Lerp(visual.color, Color.white, visual.flashWhiteBlend);
+            var flashGO = SpawnQuad("HitFlash", pos, 0.5f * visual.sizeScale, flashColor, glow: true);
+            float flashDuration = 0.22f + 0.06f * (visual.sizeScale - 1f);
+            float flashEndScale = 1.6f + 0.3f * (visual.sizeScale - 1f);
+            flashGO.AddComponent<AttackFadeScaleMotion>().Setup(flashDuration, flashEndScale);
 
             if (visual.particleCount > 0)
             {
@@ -172,18 +210,18 @@ namespace AnimalChess.Board
             if (visual.glowRing)
             {
                 var ringGO = new GameObject("GlowRing") { transform = { position = pos } };
-                ringGO.AddComponent<AttackRingExpandMotion>().Setup(visual.sizeScale, visual.color);
+                ringGO.AddComponent<AttackRingExpandMotion>().Setup(visual.sizeScale, visual.color, visual.ringWidthScale);
             }
 
             if (visual.extraFlourish)
             {
                 // 3성: 살짝 지연된 두 번째 링으로 이중 펄스 효과를 낸다.
                 var delayedGO = new GameObject("FlourishRingDelay") { transform = { position = pos } };
-                delayedGO.AddComponent<AttackDelayedRingMotion>().Setup(pos, visual.sizeScale, visual.color, 0.12f);
+                delayedGO.AddComponent<AttackDelayedRingMotion>().Setup(pos, visual.sizeScale, visual.color, 0.12f, visual.ringWidthScale);
             }
         }
 
-        private static GameObject SpawnQuad(string name, Vector3 pos, float size, Color color)
+        private static GameObject SpawnQuad(string name, Vector3 pos, float size, Color color, bool glow = false)
         {
             var go = GameObject.CreatePrimitive(PrimitiveType.Quad);
             go.name = name;
@@ -200,7 +238,7 @@ namespace AnimalChess.Board
             }
 
             var renderer = go.GetComponent<MeshRenderer>();
-            renderer.sharedMaterial = GetOrCreateMaterial();
+            renderer.sharedMaterial = glow ? GetOrCreateGlowMaterial() : GetOrCreateMaterial();
             renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
             renderer.receiveShadows = false;
 
@@ -230,6 +268,33 @@ namespace AnimalChess.Board
 
             _sharedMaterial = mat;
             return _sharedMaterial;
+        }
+
+        /// <summary>
+        /// 타격 플래시/파티클/링 전용 소프트 애디티브 머티리얼. (SrcAlpha, One)으로 블렌딩해서
+        /// 겹치는 부분이 더 밝게 빛나 보이게 하고, 어두운 보드 배경 위에서도 이펙트 윤곽이
+        /// 또렷하게 도드라지게 만든다. 기존 SharedMaterial(일반 알파 블렌딩)과 셰이더는 같고
+        /// 블렌드 모드만 다르다.
+        /// </summary>
+        private static Material GetOrCreateGlowMaterial()
+        {
+            if (_sharedGlowMaterial != null) return _sharedGlowMaterial;
+
+            var shader = Shader.Find("Universal Render Pipeline/Unlit");
+            var mat = new Material(shader) { name = "AttackEffectGlowMaterial" };
+            mat.SetFloat("_Surface", 1f); // 0 = Opaque, 1 = Transparent
+            mat.SetFloat("_Blend", 2f);   // URP Unlit 기준 2 = Additive
+            mat.SetOverrideTag("RenderType", "Transparent");
+            mat.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
+            mat.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.One);
+            mat.SetInt("_ZWrite", 0);
+            mat.DisableKeyword("_SURFACE_TYPE_OPAQUE");
+            mat.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
+            mat.renderQueue = (int)UnityEngine.Rendering.RenderQueue.Transparent;
+            mat.SetColor(BaseColorId, Color.white);
+
+            _sharedGlowMaterial = mat;
+            return _sharedGlowMaterial;
         }
     }
 }

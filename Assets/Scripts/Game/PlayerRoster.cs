@@ -20,10 +20,14 @@ namespace AnimalChess.Game
 
         public const int BenchSize = 9;
 
-        [Header("레벨별 배치 가능 유닛 수")]
-        [Tooltip("1레벨일 때 보드에 배치할 수 있는 유닛 수. 레벨이 1 오를 때마다 이 값에서 1씩 늘어난다.\n" +
-                 "(예: 이 값이 2면 1레벨=2마리, 2레벨=3마리, 3레벨=4마리...)")]
-        [SerializeField] private int boardCapacityAtLevel1 = 2;
+        [Header("라운드별 배치 가능 유닛 수")]
+        [Tooltip("1라운드 기준 보드에 배치할 수 있는 유닛 수. 레벨이 아니라 라운드 번호로 계산한다.\n" +
+                 "(예: 이 값이 1이고 roundsPerExtraCapacity가 2면 1~2라운드=1마리, 3~4라운드=2마리, 5~6라운드=3마리...로 늘어난다.)")]
+        [SerializeField] private int boardCapacityAtRound1 = 1;
+
+        [Tooltip("이 라운드 수가 지날 때마다 배치 가능 유닛 수가 1씩 늘어난다. 예: 2면 2라운드마다 1마리씩 증가.\n" +
+                 "(EnemySpawner.roundsPerExtraEnemy와 같은 방식 - 적 웨이브 증가 커브와 맞춰 쓰는 걸 추천한다.)")]
+        [SerializeField] private int roundsPerExtraCapacity = 2;
 
         public UnitInstance[] Bench { get; private set; } = new UnitInstance[BenchSize];
 
@@ -33,16 +37,18 @@ namespace AnimalChess.Game
         public IReadOnlyDictionary<HexCoord, UnitInstance> BoardUnits => _boardUnits;
 
         /// <summary>
-        /// 지금 레벨에서 보드에 배치할 수 있는 최대 유닛 수. PlayerEconomy.Level을 기준으로 계산한다
-        /// (PlayerEconomy가 없으면 1레벨 기준값을 그대로 쓴다). EnemySpawner도 이 값을 참고해서
-        /// 적 웨이브 규모를 맞춘다.
+        /// 지금 라운드에서 보드에 배치할 수 있는 최대 유닛 수. RoundManager.CurrentRound를 기준으로 계산한다
+        /// (RoundManager가 없으면 1라운드 기준값을 그대로 쓴다). 레벨이 아니라 라운드 번호로 직접 계산해서,
+        /// "1~2라운드=1마리, 3~4라운드=2마리, 5~6라운드=3마리..."처럼 라운드 진행에 딱 맞춰 늘어난다
+        /// (EnemySpawner의 적 웨이브 증가 커브와 같은 공식).
         /// </summary>
         public int MaxBoardUnits
         {
             get
             {
-                int level = PlayerEconomy.Instance != null ? PlayerEconomy.Instance.Level : 1;
-                return boardCapacityAtLevel1 + Mathf.Max(0, level - 1);
+                int round = RoundManager.Instance != null ? RoundManager.Instance.CurrentRound : 1;
+                int roundBonus = roundsPerExtraCapacity > 0 ? (round - 1) / roundsPerExtraCapacity : 0;
+                return boardCapacityAtRound1 + roundBonus;
             }
         }
 
@@ -294,42 +300,20 @@ namespace AnimalChess.Game
 
         /// <summary>
         /// 라운드 전투 후 죽은 것으로 표시된(isAlive = false) 보드 위 유닛들을 처리한다.
-        /// 3성이면 2성으로, 2성이면 1성으로 강등시키고 다시 살아있는 상태로 되돌린다(그 타일에 그대로 남는다).
-        /// 1성이었으면(더 내려갈 곳이 없으면) 보드에서 완전히 사라지고 그 타일도 다시 빈 칸이 된다.
+        /// 밸런스상 전투에서 죽었다고 강등되거나 완전히 사라지는 건 너무 가혹하므로, 강등/제거 없이
+        /// 그냥 다시 살아있는 상태로 되돌린다. 원래 성장 단계(성 레벨) 그대로 그 타일에 남는다.
         /// </summary>
         public void ProcessDeaths()
         {
-            List<HexCoord> removed = null;
             foreach (var kvp in _boardUnits)
             {
                 var unit = kvp.Value;
                 if (unit == null || unit.isAlive) continue;
-
-                if (unit.currentData != null && unit.currentData.previousEvolution != null)
-                {
-                    unit.currentData = unit.currentData.previousEvolution;
-                    unit.isAlive = true;
-                }
-                else
-                {
-                    (removed ??= new List<HexCoord>()).Add(kvp.Key);
-                }
+                unit.isAlive = true;
             }
 
-            if (removed != null)
-            {
-                foreach (var coord in removed)
-                {
-                    _boardUnits.Remove(coord);
-                    if (BoardManager.Instance != null && BoardManager.Instance.TryGetTile(coord, out HexTile tile))
-                    {
-                        tile.IsOccupied = false;
-                    }
-                }
-            }
-
-            // 강등으로 인해 더 낮은 성장 단계의 마릿수가 우연히 3마리가 될 수도 있으므로
-            // (예: 2성 2마리가 이미 있는데 3성 하나가 죽어서 2성으로 강등되는 경우) 항상 확인한다.
+            // 부활 자체는 강등/제거를 일으키지 않지만, 상점 구매 등 다른 경로에서 밀려있던
+            // 합성(진화) 체크가 남아있을 수 있으므로 안전하게 한 번 더 확인해준다.
             TryEvolveAll();
         }
 

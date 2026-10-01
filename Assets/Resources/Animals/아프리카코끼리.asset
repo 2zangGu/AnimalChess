@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: "\uC544\uD504\uB9AC\uCE74\uCF54\uB07C\uB9AC"
   m_EditorClassIdentifier: Assembly-CSharp::AnimalChess.Data.AnimalData
   displayName: "\uC544\uD504\uB9AC\uCE74\uCF54\uB07C\uB9AC"
-  description: "\u2605\u2605\u2605\u2605\u2605 HP / \u2605\u2605\u2605\u2605 \uACF5\uACA9 / \u2605\u2605\u2605\u2605\u2605 \uBC29\uC5B4 / \u2605 \uACF5\uC18D / \uC0AC\uAC70\uB9AC 1\n\uCD5C\uAC15 \uD0F1\uCEE4"
+  description: "\u2605\u2605\u2605\u2605\u2605 HP / \u2605\u2605\u2605 \uACF5\uACA9 / \u2605\u2605\u2605\u2605 \uBC29\uC5B4 / \u2605 \uACF5\uC18D / \uC0AC\uAC70\uB9AC 1\n\uCD5C\uAC15 \uD0F1\uCEE4"
   icon: {fileID: 21300000, guid: 8e8cea9b05e47534b9663593ed0e63a2, type: 3}
   modelPrefab: {fileID: 0}
   species: 0
@@ -24,7 +24,7 @@ MonoBehaviour:
   nextEvolution: {fileID: 11400000, guid: 20401194cabf72141a46307ae469a86d, type: 2}
   baseStats:
     hp: 592
-    attackPower: 236.8
-    defense: 148
+    attackPower: 177.6
+    defense: 118.4
     attackSpeed: 0.3
     attackRange: 1

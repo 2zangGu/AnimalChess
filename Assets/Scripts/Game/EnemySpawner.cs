@@ -33,14 +33,16 @@ namespace AnimalChess.Game
 
         [Header("라운드 진행에 따른 웨이브 규모")]
         [Tooltip("1라운드 기준 적 웨이브 마릿수. 플레이어가 레벨업을 전혀 안 해도 최소 이만큼은 나온다.")]
-        public int baseWaveSize = 2;
+        public int baseWaveSize = 1;
 
         [Tooltip("이 라운드 수가 지날 때마다 웨이브에 적이 1마리씩 더 늘어난다(레벨을 안 올려도 라운드가 " +
-                 "진행되면 자동으로 늘어남). 예: 2면 3라운드마다 1마리씩 증가. 0이면 라운드에 따른 증가 없음.\n" +
-                 "(개별 유닛 스탯을 절반으로 낮춘 대신(EnemyRosterGenerator 참고) 이 값을 2->1로 줄여서 " +
-                 "마릿수가 라운드마다 더 빨리 늘어나게 했다 - 적 하나하나는 약해졌지만 물량으로 난이도를 " +
+                 "진행되면 자동으로 늘어남). 예: 2면 2라운드마다 1마리씩 증가. 0이면 라운드에 따른 증가 없음.\n" +
+                 "(baseWaveSize=1, 이 값=2 기준: 1~2라운드 1마리 -> 3~4라운드 2마리 -> 5~6라운드 3마리 " +
+                 "-> ... -> 29~30라운드 15마리로 늘어나는 커브. 라운드 후반부라 등장 가능한 적 종류 수 " +
+                 "자체가 목표 마릿수보다 적어지면, 모자란 만큼 같은 종류를 반복 배치해서라도 목표 " +
+                 "마릿수를 채운다(SizeToCapacity 참고) - 적 하나하나는 약해도 물량으로 난이도를 " +
                  "유지하는 방향.)")]
-        public int roundsPerExtraEnemy = 1;
+        public int roundsPerExtraEnemy = 2;
 
         private readonly Dictionary<HexCoord, EnemyUnitInstance> _boardUnits = new Dictionary<HexCoord, EnemyUnitInstance>();
         private EnemyUnitData[] _allEnemies;
@@ -106,75 +108,105 @@ namespace AnimalChess.Game
                 else ranged.Add(data);
             }
 
-            // 적 웨이브 전체 마리 수는 두 값 중 더 큰 쪽을 쓴다:
-            // 1) 플레이어가 지금 레벨에서 배치할 수 있는 유닛 수(PlayerRoster.MaxBoardUnits)
-            // 2) 라운드 진행에 따라 자연히 늘어나는 기본 웨이브 크기(baseWaveSize + 라운드 보너스)
-            // 이렇게 하면 플레이어가 레벨업을 안 해도 라운드가 지날수록 적 마릿수가 스스로 늘어나서,
-            // 유닛 개개인의 능력치를 계속 올리지 않고도 난이도가 자연스럽게 올라간다.
-            // 근접/원거리 비율은 원래 eligible 풀의 비율을 최대한 그대로 유지한다.
-            int levelBasedSize = PlayerRoster.Instance != null ? PlayerRoster.Instance.MaxBoardUnits : eligible.Count;
+            // 적 웨이브 전체 마리 수는 라운드 진행에 따라 자연히 늘어나는 기본 웨이브 크기
+            // (baseWaveSize + 라운드 보너스)를 그대로 쓴다.
+            // (예전에는 "플레이어가 지금 레벨에서 배치할 수 있는 유닛 수(PlayerRoster.MaxBoardUnits)"와
+            // 둘 중 더 큰 값을 썼는데, 그러면 1~2라운드처럼 라운드 커브가 의도적으로 적게 잡아둔
+            // 구간에서도 레벨 기준 값(레벨1=2마리)이 더 커서 커브가 무시되는 문제가 있었다.
+            // "1라운드 1마리 -> 2라운드마다 1마리씩 증가"라는 라운드 커브를 그대로 지키기 위해
+            // 레벨 기준 하한선은 제거했다 - 플레이어가 아주 빠르게 레벨업하면 일시적으로 적보다
+            // 아군이 많아질 수 있지만, 그건 플레이어가 골드를 경험치에 투자한 전략적 선택으로 본다.)
+            // 근접/원거리 비율은 원래 eligible 풀의 비율을 최대한 그대로 유지한다. 라운드 후반부라
+            // eligible 풀 자체가 목표 마릿수보다 적을 수 있으므로, 그럴 땐 SizeToCapacity가 같은
+            // 종류를 반복 배치해서라도 목표 마릿수를 채운다.
             int roundBonus = roundsPerExtraEnemy > 0 ? (round - 1) / roundsPerExtraEnemy : 0;
-            int roundBasedSize = baseWaveSize + roundBonus;
-            int capacity = Mathf.Max(levelBasedSize, roundBasedSize);
-            TrimToCapacity(melee, ranged, capacity);
+            int capacity = baseWaveSize + roundBonus;
+            SizeToCapacity(melee, ranged, capacity, round);
 
-            var frontToBack = GetEnemyTilesFrontToBack();
-            if (frontToBack.Count == 0) return;
+            // 근접은 앞줄(플레이어와 가까운 쪽)부터, 원거리는 뒷줄(플레이어와 먼 쪽)부터 채우되,
+            // 각각 독립적으로 "그 줄의 가운데부터 좌우로 고르게" 퍼지는 순서를 쓴다. 그래야 마릿수가
+            // 적을 때도 한쪽 구석(근접=전방 왼쪽, 원거리=후방 오른쪽)에 몰리지 않고 고르게 보인다.
+            var meleeOrder = GetEnemyTilesOrdered(frontFirst: true);
+            var rangedOrder = GetEnemyTilesOrdered(frontFirst: false);
+            if (meleeOrder.Count == 0 && rangedOrder.Count == 0) return;
 
             var claimed = new HashSet<HexCoord>();
 
-            // 근접: 앞줄(적 존에서 플레이어와 가장 가까운 줄)부터 채운다.
-            int frontIdx = 0;
+            int meleeIdx = 0;
             foreach (var data in melee)
             {
-                while (frontIdx < frontToBack.Count && claimed.Contains(frontToBack[frontIdx].Coord)) frontIdx++;
-                if (frontIdx >= frontToBack.Count) break;
-                PlaceUnit(frontToBack[frontIdx], data, claimed);
-                frontIdx++;
+                while (meleeIdx < meleeOrder.Count && claimed.Contains(meleeOrder[meleeIdx].Coord)) meleeIdx++;
+                if (meleeIdx >= meleeOrder.Count) break;
+                PlaceUnit(meleeOrder[meleeIdx], data, claimed);
+                meleeIdx++;
             }
 
-            // 원거리: 뒷줄(적 존에서 플레이어와 가장 먼 줄)부터 채운다.
-            int backIdx = frontToBack.Count - 1;
+            int rangedIdx = 0;
             foreach (var data in ranged)
             {
-                while (backIdx >= 0 && claimed.Contains(frontToBack[backIdx].Coord)) backIdx--;
-                if (backIdx < 0) break;
-                PlaceUnit(frontToBack[backIdx], data, claimed);
-                backIdx--;
+                while (rangedIdx < rangedOrder.Count && claimed.Contains(rangedOrder[rangedIdx].Coord)) rangedIdx++;
+                if (rangedIdx >= rangedOrder.Count) break;
+                PlaceUnit(rangedOrder[rangedIdx], data, claimed);
+                rangedIdx++;
             }
         }
 
         /// <summary>
-        /// melee/ranged 목록(등장 시작 라운드 순으로 이미 정렬돼 있음)을 합쳐서 capacity마리를
-        /// 넘지 않도록 뒤쪽(더 늦게 등장하는, 즉 더 강한 쪽)부터 잘라낸다. 두 목록의 비율은
-        /// 원래 비율에 최대한 가깝게 유지한다.
+        /// melee/ranged 목록(등장 시작 라운드 순으로 이미 정렬돼 있음)을 원래 비율을 최대한
+        /// 유지하면서 정확히 capacity마리가 되도록 맞춘다. 목표 마릿수가 원래 목록 크기보다 크면
+        /// (라운드 후반부라 등장 가능한 적 종류 수 자체가 목표보다 모자랄 때) 같은 목록을 처음부터
+        /// 다시 순환시켜 같은 종류를 반복 배치해서라도 capacity를 채운다. 목표가 더 작으면 라운드
+        /// 번호에 따라 회전된 위치에서 targetCount개를 뽑는다(Resize 참고) - 그래야 후보 풀이 같아도
+        /// 라운드마다 다른 조합이 나온다.
         /// </summary>
-        private static void TrimToCapacity(List<EnemyUnitData> melee, List<EnemyUnitData> ranged, int capacity)
+        private static void SizeToCapacity(List<EnemyUnitData> melee, List<EnemyUnitData> ranged, int capacity, int round)
         {
             capacity = Mathf.Max(0, capacity);
             int total = melee.Count + ranged.Count;
-            if (total <= capacity) return;
+            if (total == 0) return;
 
-            int meleeTake = total > 0 ? Mathf.RoundToInt(capacity * (melee.Count / (float)total)) : 0;
-            meleeTake = Mathf.Clamp(meleeTake, 0, melee.Count);
-            int rangedTake = Mathf.Clamp(capacity - meleeTake, 0, ranged.Count);
+            // melee.Count==0이면 비율도 자연히 0이 되므로, 원래 비어 있던 쪽에 목표치가 잘못
+            // 배정되는 일은 없다.
+            int meleeTarget = Mathf.Clamp(Mathf.RoundToInt(capacity * (melee.Count / (float)total)), 0, capacity);
+            int rangedTarget = capacity - meleeTarget;
 
-            // 반올림이나 한쪽 풀이 모자라서 아직 capacity를 다 못 채웠으면, 남는 자리를 다른 쪽에서 채운다.
-            int remaining = capacity - meleeTake - rangedTake;
-            if (remaining > 0 && meleeTake < melee.Count)
+            Resize(melee, meleeTarget, round);
+            Resize(ranged, rangedTarget, round);
+        }
+
+        /// <summary>
+        /// list를 정확히 targetCount 길이로 맞춘다. 늘려야 하면 원래 목록을 처음부터 다시 순환하며
+        /// 반복 추가하고(같은 종류가 여러 마리 중복 배치됨), 줄여야 하면 항상 앞쪽(가장 먼저 등장하는,
+        /// 즉 가장 약한 쪽)만 남기는 대신 라운드 번호로 목록을 회전시켜서 targetCount개를 뽑는다.
+        /// 이렇게 하면 같은 후보 풀 안에서도 라운드가 바뀔 때마다 다른 조합이 나와서(예: 1라운드는
+        /// 후보가 1종류뿐이라 어쩔 수 없지만, 2라운드부터는 후보가 늘어난 만큼 매 라운드 다른 유닛이
+        /// 섞여 나온다), "1, 2라운드 적이 항상 똑같다" 같은 정체 현상이 사라진다. 라운드 번호만으로
+        /// 계산하므로 같은 라운드를 다시 봐도 결과는 항상 같다(결정적).
+        /// </summary>
+        private static void Resize(List<EnemyUnitData> list, int targetCount, int round)
+        {
+            targetCount = Mathf.Max(0, targetCount);
+            if (list.Count == 0 || targetCount == list.Count) return;
+
+            if (targetCount < list.Count)
             {
-                int extra = Mathf.Min(remaining, melee.Count - meleeTake);
-                meleeTake += extra;
-                remaining -= extra;
-            }
-            if (remaining > 0 && rangedTake < ranged.Count)
-            {
-                int extra = Mathf.Min(remaining, ranged.Count - rangedTake);
-                rangedTake += extra;
+                int n = list.Count;
+                int offset = ((round - 1) % n + n) % n;
+                var rotated = new List<EnemyUnitData>(targetCount);
+                for (int i = 0; i < targetCount; i++)
+                {
+                    rotated.Add(list[(offset + i) % n]);
+                }
+                list.Clear();
+                list.AddRange(rotated);
+                return;
             }
 
-            if (melee.Count > meleeTake) melee.RemoveRange(meleeTake, melee.Count - meleeTake);
-            if (ranged.Count > rangedTake) ranged.RemoveRange(rangedTake, ranged.Count - rangedTake);
+            int sourceCount = list.Count;
+            for (int i = sourceCount; i < targetCount; i++)
+            {
+                list.Add(list[i % sourceCount]);
+            }
         }
 
         private void PlaceUnit(HexTile tile, EnemyUnitData data, HashSet<HexCoord> claimed)
@@ -186,22 +218,78 @@ namespace AnimalChess.Game
         }
 
         /// <summary>
-        /// 적 존 타일을 앞줄(플레이어와 가까운 쪽)부터 뒷줄 순서로 정렬해서 반환한다.
-        /// 같은 줄 안에서는 왼쪽에서 오른쪽 순서(월드 x좌표 기준)로 정렬한다.
+        /// 적 존 타일을 줄 단위로 순서대로(frontFirst=true면 앞줄->뒷줄, false면 뒷줄->앞줄) 반환하되,
+        /// 같은 줄 안에서는 왼쪽부터 채우는 대신 "가운데 -> 좌우 번갈아 바깥쪽"으로 순서를 매긴다.
+        /// 이렇게 하면 그 줄에 몇 마리만 놓여도 한쪽 구석에 몰리지 않고 중앙 위주로 고르게 퍼진다.
         /// </summary>
-        private List<HexTile> GetEnemyTilesFrontToBack()
+        private List<HexTile> GetEnemyTilesOrdered(bool frontFirst)
         {
-            var tiles = new List<HexTile>();
+            var rows = new SortedDictionary<int, List<HexTile>>();
             foreach (var tile in BoardManager.Instance.AllTiles)
             {
-                if (!tile.IsPlayerZone) tiles.Add(tile);
+                if (tile.IsPlayerZone) continue;
+                if (!rows.TryGetValue(tile.Coord.r, out var rowTiles))
+                {
+                    rowTiles = new List<HexTile>();
+                    rows[tile.Coord.r] = rowTiles;
+                }
+                rowTiles.Add(tile);
             }
-            tiles.Sort((a, b) =>
+
+            var rowKeys = new List<int>(rows.Keys); // SortedDictionary라 이미 오름차순(앞줄->뒷줄) 정렬됨.
+            if (!frontFirst) rowKeys.Reverse();
+
+            var result = new List<HexTile>();
+            foreach (var key in rowKeys)
             {
-                int rowCompare = a.Coord.r.CompareTo(b.Coord.r);
-                return rowCompare != 0 ? rowCompare : a.transform.position.x.CompareTo(b.transform.position.x);
-            });
-            return tiles;
+                var rowTiles = rows[key];
+                rowTiles.Sort((a, b) => a.transform.position.x.CompareTo(b.transform.position.x));
+                result.AddRange(CenterOutOrder(rowTiles));
+            }
+            return result;
+        }
+
+        /// <summary>
+        /// 왼쪽->오른쪽으로 정렬된 한 줄의 타일 목록을, 가운데 타일부터 시작해서 오른쪽/왼쪽을
+        /// 번갈아 가며 바깥쪽으로 넓혀가는 순서로 재배열한다(가운데부터 고르게 퍼지는 배치용).
+        /// </summary>
+        private static List<HexTile> CenterOutOrder(List<HexTile> leftToRight)
+        {
+            int n = leftToRight.Count;
+            var ordered = new List<HexTile>(n);
+            if (n == 0) return ordered;
+
+            int mid = (n - 1) / 2;
+            ordered.Add(leftToRight[mid]);
+
+            int left = mid - 1;
+            int right = mid + 1;
+            bool takeRight = true;
+            while (left >= 0 || right < n)
+            {
+                if (takeRight && right < n)
+                {
+                    ordered.Add(leftToRight[right]);
+                    right++;
+                }
+                else if (!takeRight && left >= 0)
+                {
+                    ordered.Add(leftToRight[left]);
+                    left--;
+                }
+                else if (right < n)
+                {
+                    ordered.Add(leftToRight[right]);
+                    right++;
+                }
+                else if (left >= 0)
+                {
+                    ordered.Add(leftToRight[left]);
+                    left--;
+                }
+                takeRight = !takeRight;
+            }
+            return ordered;
         }
 
         /// <summary>
